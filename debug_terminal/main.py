@@ -13,7 +13,8 @@ BAUD = 115200
 SERIAL_TIMEOUT = 1.0
 MAX_LOG_LINES = 20
 BROADCAST = 0xFFFF
-BCAST_MASK=0x00ff
+BCAST_MASK = 0x00FF
+
 
 def listener(port: str, outgoing: Queue, incoming: Callable):
     serial = Serial(port, BAUD, timeout=SERIAL_TIMEOUT)
@@ -116,7 +117,8 @@ class TermFrame(wx.Frame):
         button = wx.Button(self, label="START")
         button.Bind(wx.EVT_BUTTON, self.on_start)
         sizer3.Add(button, 0, wx.EXPAND | wx.TOP, 10)
-        button = wx.Button(self, label="BUTTON 4")
+        button = wx.Button(self, label="STOP")
+        button.Bind(wx.EVT_BUTTON, self.on_stop)
         sizer3.Add(button, 0, wx.EXPAND | wx.TOP, 10)
         self.log_ctrl = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_READONLY)
         sizer2.Add(self.log_ctrl, 3, wx.LEFT | wx.EXPAND, 10)
@@ -149,6 +151,10 @@ class TermFrame(wx.Frame):
         packet = Packet(PacketType.START, BROADCAST, app.seq_num, b"\x00")
         app.outgoing.put(packet)
         self.add(packet)
+
+    def on_stop(self, _event: wx.CommandEvent):
+        app: TerminalApp = wx.GetApp()
+        app.send_stop()
 
 
 class TerminalApp(wx.App):
@@ -187,7 +193,7 @@ class TerminalApp(wx.App):
         if packet.packet_type == PacketType.ERROR:
             self.send_ack(packet.source, packet.seq_num)
             self.send_stop()
-        elif (packet.dest&BCAST_MASK)!=BCAST_MASK:
+        elif (packet.dest & BCAST_MASK) != BCAST_MASK:
             self.send_ack(packet.source, packet.seq_num)
 
 

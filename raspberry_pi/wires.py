@@ -29,7 +29,7 @@ COLOR_POSITIONS = [BLACK, BLACK, BLUE, BLUE, RED, RED, WHITE, WHITE, YELLOW, YEL
 
 
 class WireModule(KtaneHardware):
-    should_cut: int
+    right_post: int
     mapping: list
     colors: list
 
@@ -157,15 +157,15 @@ class WireModule(KtaneHardware):
             posts_in_use = [index for index, mapping in enumerate(self.mapping) if COLOR_POSITIONS[mapping] == color]
         if post_number < 0:
             # Count from end
-            self.should_cut = posts_in_use[post_number]
+            self.right_post = posts_in_use[post_number]
         else:
             # Post number (Warning: post #1 means index 0!)
-            self.should_cut = posts_in_use[post_number - 1]
+            self.right_post = posts_in_use[post_number - 1]
 
-        LOG("should_cut=", self.should_cut)
+        LOG("right_post=", self.right_post)
 
     def count_num_of(self, color_to_count: int) -> int:
-        return len(1 for color in self.colors if color == color_to_count)
+        return sum(1 for color in self.colors if color == color_to_count)
 
     def poll(self) -> None:
         KtaneHardware.poll(self)
@@ -176,7 +176,7 @@ class WireModule(KtaneHardware):
                 if (mapping is not None) and self.posts[index].value():
                     # Wire cut! Was it the right one?
                     LOG("cut=", index)
-                    if index == self.should_cut:
+                    if index == self.right_post:
                         self.disarmed()
                     else:
                         self.strike()
