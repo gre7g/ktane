@@ -2,6 +2,7 @@ from machine import Pin, UART, lightsleep
 from math import ceil
 from random import randrange
 import struct
+from time import time
 
 # Constants:
 UART_NUM = 1
@@ -12,6 +13,10 @@ TX_EN_PIN = 15
 ONE_FRAME = 10 / BAUD_RATE * 1000.0
 TWO_FRAMES = int(ceil(10 / BAUD_RATE * 1000.0))
 BACKOFF_TIME = (1, 5)
+RETRY_TIME = 1  # 1s
+TIMER_ADDR = 0x0000
+BROADCAST_ALL = 0xFFFF
+BROADCAST_MASK = 0x00FF
 
 STATUS_RED = 28
 STATUS_GREEN = 27
@@ -58,15 +63,26 @@ SOUND_MORSE_A = 15
 SOUND_MORSE_Z = 40
 
 
+class QueuedPacket:
+    def __init__(self, dest: int, packet_type: int, payload: bytes = b"") -> None:
+        self.dest, self.packet_type, self.payload = dest, packet_type, payload
+
+
 class KtaneHardware:
+    next_retry: int
+
     def __init__(self, addr: int) -> None:
         self.addr = addr
-        self.mode = MODE_SLEEP
         self.uart = UART(UART_NUM, BAUD_RATE, tx=Pin(TX_PIN), rx=Pin(RX_PIN))
         self.tx_en = Pin(TX_EN_PIN, Pin.OUT)
         self.status_red = Pin(STATUS_RED, Pin.IN)
         self.status_green = Pin(STATUS_GREEN, Pin.IN)
-        self.handlers = {}
+        self.handlers = {
+            MT_REQUEST_ID: self.request_id,
+        }
+        self.last_seq_seen = 0
+        self.awaiting_ack_of_seq = self.queued_packet = None
+        self.set_mode(MODE_SLEEP)
 
     def set_mode(self, mode: int) -> None:
         if mode == MODE_SLEEP:
@@ -80,6 +96,24 @@ class KtaneHardware:
             self.status_green.init(Pin.OUT)
             self.status_red.init(Pin.IN)
             self.status_green.off()  # active low
+
+    def queue_packet(self, packet: QueuedPacket) -> None:
+        self.queued_packet = packet
+        self.retry_now()
+
+    def send_ack(self, dest: int, seq_num: int) -> None:
+        self.send(dest, MT_ACK, seq_num)
+
+    def send_without_queuing(self, dest: int, packet_type: int, payload: bytes = b"") -> None:
+        seq_num = (self.last_seq_seen + 1) & 0xFF
+        self.last_seq_seen = seq_num
+        self.send(dest, packet_type, seq_num, payload)
+
+    def retry_now(self) -> None:
+        seq_num = (self.last_seq_seen + 1) & 0xFF
+        self.last_seq_seen = self.awaiting_ack_of_seq = seq_num
+        self.send(self.queued_packet.dest, self.queued_packet.packet_type, seq_num, self.queued_packet.payload)
+        self.next_retry = time() + RETRY_TIME
 
     # UART MEMBERS
     #
@@ -118,18 +152,33 @@ class KtaneHardware:
                         # Still nothing, abort the packet
                         break
             else:
-                # Check the packet type
-                handler = self.handlers.get(packet[5])
-                if handler:
-                    # Valid type. Is the checksum okay?
-                    (checksum,) = struct.unpack("<H", packet[-2:])
-                    checksum += sum(packet[:-2])
-                    if checksum == 0xFFFF:
-                        # Checksum is okay. Hand off the packet
-                        source, dest, seq_num = struct.unpack("<HHxB", packet[1:7])
-                        handler(source, dest, packet[7:-2])
+                # Is the checksum okay?
+                (checksum,) = struct.unpack("<H", packet[-2:])
+                checksum += sum(packet[:-2])
+                if checksum == 0xFFFF:
+                    # Checksum is okay. Save the sequence number.
+                    source, dest, packet_type, seq_num = struct.unpack("<HHBB", packet[1:7])
+                    payload = packet[7:-2]
+                    if packet_type != MT_ACK:
+                        self.last_seq_seen = seq_num
 
-    def send(self, dest: int, packet_type: int, seq_num: int, payload: bytes) -> None:
+                    # Is it for us?
+                    if (dest == self.addr) or (dest == BROADCAST_ALL) or (dest == (self.addr | BROADCAST_MASK)):
+                        # Yes, for us. Was it an ack for a queued packet?
+                        if self.queued_packet and (packet_type == MT_ACK) and (source == self.queued_packet.dest):
+                            self.queued_packet = self.awaiting_ack_of_seq = self.next_retry = None
+                        else:
+                            # Not an ack. Do we have a handler?
+                            handler = self.handlers.get(packet_type)
+                            if handler:
+                                # We have a handler. Hand off the packet.
+                                handler(source, dest, payload)
+
+        # Need to retry?
+        if (self.next_retry is not None) and (time() >= self.next_retry):
+            self.retry_now()
+
+    def send(self, dest: int, packet_type: int, seq_num: int, payload: bytes = b"") -> None:
         """Send a packet"""
         # Is anything inbound?
         while self.uart.any():
@@ -149,10 +198,11 @@ class KtaneHardware:
         self.tx_en.off()
 
     def unable_to_arm(self) -> None:
-        pass  # TODO
+        self.queue_packet(QueuedPacket(TIMER_ADDR, MT_ERROR))
 
     def disarmed(self):
-        pass  # TODO
+        self.queue_packet(QueuedPacket(TIMER_ADDR, MT_DEFUSED))
+        self.set_mode(MODE_DISARMED)
 
     def strike(self):
-        pass  # TODO
+        self.queue_packet(QueuedPacket(TIMER_ADDR, MT_STRIKE))
