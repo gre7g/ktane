@@ -12,8 +12,9 @@ TX_EN_PIN = 15
 ONE_FRAME = 10 / BAUD_RATE * 1000.0
 TWO_FRAMES = int(ceil(10 / BAUD_RATE * 1000.0))
 BACKOFF_TIME = (1, 5)
-STATUS_RED = 27
-STATUS_GREEN = 28
+
+STATUS_RED = 28
+STATUS_GREEN = 27
 
 MODE_SLEEP = 0
 MODE_READY = 1
@@ -104,17 +105,16 @@ class KtaneHardware:
 
             # Read remainder
             while len(packet) < length:
-                # How much is queued?
-                available = min(self.uart.any(), length - len(packet))
-                if available:
+                # Anything queued?
+                if self.uart.any():
                     # Read it in
-                    packet += self.uart.read(available)
+                    packet += self.uart.read(1)
                 else:
                     # Nothing is queued. Wait two frame times.
                     lightsleep(TWO_FRAMES)
 
                     # Is anything queued now?
-                    if self.uart.any() == 0:
+                    if not self.uart.any():
                         # Still nothing, abort the packet
                         break
             else:
@@ -147,3 +147,12 @@ class KtaneHardware:
         self.uart.write(data)
         lightsleep(int(ceil(delay)))
         self.tx_en.off()
+
+    def unable_to_arm(self) -> None:
+        pass  # TODO
+
+    def disarmed(self):
+        pass  # TODO
+
+    def strike(self):
+        pass  # TODO
