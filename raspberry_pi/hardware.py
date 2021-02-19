@@ -100,16 +100,16 @@ class KtaneHardware:
     def set_mode(self, mode: int) -> None:
         self.mode = mode
         if mode == MODE_SLEEP:
-            LOG("sleep")
+            LOG("mode=sleep")
             self.status_green.init(Pin.IN)
             self.status_red.init(Pin.IN)
         elif mode in [MODE_ARMED, MODE_READY]:
-            LOG("armed or ready")
+            LOG("mode=armed or ready")
             self.status_green.init(Pin.IN)
             self.status_red.init(Pin.OUT)
             self.status_red.off()  # active low
         elif mode == MODE_DISARMED:
-            LOG("disarmed")
+            LOG("mode=disarmed")
             self.status_green.init(Pin.OUT)
             self.status_red.init(Pin.IN)
             self.status_green.off()  # active low

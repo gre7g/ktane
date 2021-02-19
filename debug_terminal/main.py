@@ -13,7 +13,7 @@ BAUD = 115200
 SERIAL_TIMEOUT = 1.0
 MAX_LOG_LINES = 20
 BROADCAST = 0xFFFF
-
+BCAST_MASK=0x00ff
 
 def listener(port: str, outgoing: Queue, incoming: Callable):
     serial = Serial(port, BAUD, timeout=SERIAL_TIMEOUT)
@@ -187,6 +187,8 @@ class TerminalApp(wx.App):
         if packet.packet_type == PacketType.ERROR:
             self.send_ack(packet.source, packet.seq_num)
             self.send_stop()
+        elif (packet.dest&BCAST_MASK)!=BCAST_MASK:
+            self.send_ack(packet.source, packet.seq_num)
 
 
 if __name__ == "__main__":

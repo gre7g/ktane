@@ -30,6 +30,8 @@ COLOR_POSITIONS = [BLACK, BLACK, BLUE, BLUE, RED, RED, WHITE, WHITE, YELLOW, YEL
 
 class WireModule(KtaneHardware):
     should_cut: int
+    mapping: list
+    colors: list
 
     def __init__(self) -> None:
         KtaneHardware.__init__(self, self.read_config())
@@ -37,18 +39,6 @@ class WireModule(KtaneHardware):
         self.serial_number = b""
         self.posts = [Pin(pin_num, Pin.IN, Pin.PULL_UP) for pin_num in POSTS]
         self.wires = [Pin(pin_num, Pin.OUT) for pin_num in WIRES]
-
-        # Map them
-        self.mapping = [None] * len(POSTS)
-        for index1 in range(len(WIRES)):
-            for index2, wire in enumerate(self.wires):
-                wire.value(index1 != index2)
-            for index2, post in enumerate(self.posts):
-                if not post.value():
-                    self.mapping[index2] = index1
-                    break
-
-        self.colors = [COLOR_POSITIONS[mapping] for mapping in self.mapping if mapping is not None]
 
     @staticmethod
     def read_config() -> int:
@@ -89,7 +79,25 @@ class WireModule(KtaneHardware):
         return False
 
     def determine_correct_wire(self) -> bool:
+        # Map wires-posts
+        self.mapping = [None] * len(POSTS)
+        for index1 in range(len(WIRES)):
+            for index2, wire in enumerate(self.wires):
+                wire.value(index1 != index2)
+            for index2, post in enumerate(self.posts):
+                if not post.value():
+                    self.mapping[index2] = index1
+                    break
+
+        # Reduce to a list of colors
+        self.colors = [COLOR_POSITIONS[mapping] for mapping in self.mapping if mapping is not None]
         num_wires = len(self.colors)
+
+        # Drive the wires low
+        for wire in self.wires:
+            wire.value(False)
+
+        # Game logic
         last_serial_digit_odd = self.serial_number[-1] in b"13579"
         if num_wires < 3:
             return False
@@ -139,20 +147,20 @@ class WireModule(KtaneHardware):
                 self.should_cut(4)  # Cut fourth
         return True
 
-    def should_cut(self, wire_number: int, color=None) -> None:
+    def should_cut(self, post_number: int, color=None) -> None:
         # Did they specify a color (e.g. "last red" or "first white")?
         if color is None:
             # No all colors, so just skip None
-            mapping_skip_nones = [mapping for mapping in self.mapping if mapping is not None]
+            posts_in_use = [index for index, mapping in enumerate(self.mapping) if mapping is not None]
         else:
             # Specific color
-            mapping_skip_nones = [mapping for mapping in self.mapping if mapping == color]
-        if wire_number < 0:
+            posts_in_use = [index for index, mapping in enumerate(self.mapping) if COLOR_POSITIONS[mapping] == color]
+        if post_number < 0:
             # Count from end
-            self.should_cut = mapping_skip_nones[wire_number]
+            self.should_cut = posts_in_use[post_number]
         else:
-            # Wire number (Warning: wire #1 means index 0!)
-            self.should_cut = mapping_skip_nones[wire_number - 1]
+            # Post number (Warning: post #1 means index 0!)
+            self.should_cut = posts_in_use[post_number - 1]
 
         LOG("should_cut=", self.should_cut)
 
@@ -165,9 +173,10 @@ class WireModule(KtaneHardware):
         # When the module is running, check if a wire has been cut
         if self.mode == MODE_ARMED:
             for index, mapping in enumerate(self.mapping):
-                if (mapping is not None) and self.wires[mapping].value():
+                if (mapping is not None) and self.posts[index].value():
                     # Wire cut! Was it the right one?
-                    if mapping == self.should_cut:
+                    LOG("cut=", index)
+                    if index == self.should_cut:
                         self.disarmed()
                     else:
                         self.strike()
