@@ -13,6 +13,7 @@ TX_EN_PIN = 15
 ONE_FRAME = 10 / BAUD_RATE * 1000.0
 TWO_FRAMES = int(ceil(10 / BAUD_RATE * 1000.0))
 BACKOFF_TIME = (1, 5)
+BCAST_REPLY_BACKOFF = (1, 50)
 RETRY_TIME = 1  # 1s
 TIMER_ADDR = 0x0000
 BROADCAST_ALL = 0xFFFF
@@ -26,19 +27,27 @@ MODE_READY = 1
 MODE_ARMED = 2
 MODE_DISARMED = 3
 
-MT_REQUEST_ID = 0
-MT_RESPONSE_ID = 1
-MT_ACK = 2
-MT_STOP = 3
-MT_CONFIGURE = 4
-MT_START = 5
-MT_STRIKE = 6
-MT_ERROR = 7
-MT_DEFUSED = 8
-MT_NEEDY = 9
-MT_READ_STATUS = 10
-MT_STATUS = 11
-MT_SOUND = 12
+PT_RESPONSE_MASK = 0x80
+PT_ACK = 0x80
+PT_REQUEST_ID = 0x01
+PT_RESPONSE_ID = 0x81
+PT_STOP = 0x02
+PT_CONFIGURE = 0x03
+PT_START = 0x04
+PT_STRIKE = 0x05
+PT_ERROR = 0x06
+PT_DEFUSED = 0x07
+PT_NEEDY = 0x08
+PT_READ_STATUS = 0x09
+PT_STATUS = 0x89
+PT_SOUND = 0x0A
+
+MT_TIMER = 0x00
+MT_WIRES = 0x01
+MT_BUTTON = 0x02
+MT_KEYPAD = 0x03
+MT_SIMON = 0x04
+MT_MORSE = 0x07
 
 FLAG_TRIGGER = 0x01
 FLAG_NEEDY = 0x02
@@ -69,7 +78,9 @@ class QueuedPacket:
 
 
 class KtaneHardware:
+    mode: int
     next_retry: int
+    reply_storage: bytes
 
     def __init__(self, addr: int) -> None:
         self.addr = addr
@@ -77,14 +88,13 @@ class KtaneHardware:
         self.tx_en = Pin(TX_EN_PIN, Pin.OUT)
         self.status_red = Pin(STATUS_RED, Pin.IN)
         self.status_green = Pin(STATUS_GREEN, Pin.IN)
-        self.handlers = {
-            MT_REQUEST_ID: self.request_id,
-        }
+        self.handlers = {PT_STOP: self.stop}
         self.last_seq_seen = 0
         self.awaiting_ack_of_seq = self.queued_packet = None
         self.set_mode(MODE_SLEEP)
 
     def set_mode(self, mode: int) -> None:
+        self.mode = mode
         if mode == MODE_SLEEP:
             self.status_green.init(Pin.IN)
             self.status_red.init(Pin.IN)
@@ -102,7 +112,7 @@ class KtaneHardware:
         self.retry_now()
 
     def send_ack(self, dest: int, seq_num: int) -> None:
-        self.send(dest, MT_ACK, seq_num)
+        self.send(dest, PT_ACK, seq_num)
 
     def send_without_queuing(self, dest: int, packet_type: int, payload: bytes = b"") -> None:
         seq_num = (self.last_seq_seen + 1) & 0xFF
@@ -114,6 +124,13 @@ class KtaneHardware:
         self.last_seq_seen = self.awaiting_ack_of_seq = seq_num
         self.send(self.queued_packet.dest, self.queued_packet.packet_type, seq_num, self.queued_packet.payload)
         self.next_retry = time() + RETRY_TIME
+
+    def send_block_return_response(self, packet: QueuedPacket):
+        self.queued_packet = packet
+        self.retry_now()
+        while self.queued_packet:
+            KtaneHardware.poll(self)  # Just this poll, not subclassed
+        return self.reply_storage
 
     # UART MEMBERS
     #
@@ -159,24 +176,35 @@ class KtaneHardware:
                     # Checksum is okay. Save the sequence number.
                     source, dest, packet_type, seq_num = struct.unpack("<HHBB", packet[1:7])
                     payload = packet[7:-2]
-                    if packet_type != MT_ACK:
+                    if (packet_type & PT_RESPONSE_MASK) == 0:
                         self.last_seq_seen = seq_num
 
                     # Is it for us?
                     if (dest == self.addr) or (dest == BROADCAST_ALL) or (dest == (self.addr | BROADCAST_MASK)):
-                        # Yes, for us. Was it an ack for a queued packet?
-                        if self.queued_packet and (packet_type == MT_ACK) and (source == self.queued_packet.dest):
+                        # Yes, for us. Was it a response?
+                        if (
+                            self.queued_packet
+                            and (packet_type & PT_RESPONSE_MASK)
+                            and (source == self.queued_packet.dest)
+                            and (seq_num == self.awaiting_ack_of_seq)
+                        ):
                             self.queued_packet = self.awaiting_ack_of_seq = self.next_retry = None
-                        else:
-                            # Not an ack. Do we have a handler?
-                            handler = self.handlers.get(packet_type)
-                            if handler:
-                                # We have a handler. Hand off the packet.
-                                handler(source, dest, payload)
+                            self.reply_storage = payload
+
+                        # Do we have a handler?
+                        handler = self.handlers.get(packet_type)
+                        if handler:
+                            # We have a handler. Hand off the packet. It will return a True if it took care of ACKing.
+                            if not handler(source, dest, payload) and ((dest & BROADCAST_MASK) != BROADCAST_MASK):
+                                self.send_ack(source, seq_num)
 
         # Need to retry?
         if (self.next_retry is not None) and (time() >= self.next_retry):
             self.retry_now()
+
+    def poll_forever(self):
+        while True:
+            self.poll()
 
     def send(self, dest: int, packet_type: int, seq_num: int, payload: bytes = b"") -> None:
         """Send a packet"""
@@ -186,7 +214,7 @@ class KtaneHardware:
             self.poll()
 
             # Random backoff
-            lightsleep(randrange(*BACKOFF_TIME))
+            lightsleep(randrange(*BCAST_REPLY_BACKOFF) if packet_type == PT_RESPONSE_ID else randrange(*BACKOFF_TIME))
 
         # Send packet
         data = struct.pack("<BHHBB", 2 + 2 + 1 + 1 + len(payload), self.addr, dest, packet_type, seq_num) + payload
@@ -198,11 +226,15 @@ class KtaneHardware:
         self.tx_en.off()
 
     def unable_to_arm(self) -> None:
-        self.queue_packet(QueuedPacket(TIMER_ADDR, MT_ERROR))
+        self.queue_packet(QueuedPacket(TIMER_ADDR, PT_ERROR))
 
     def disarmed(self):
-        self.queue_packet(QueuedPacket(TIMER_ADDR, MT_DEFUSED))
+        self.queue_packet(QueuedPacket(TIMER_ADDR, PT_DEFUSED))
         self.set_mode(MODE_DISARMED)
 
     def strike(self):
-        self.queue_packet(QueuedPacket(TIMER_ADDR, MT_STRIKE))
+        self.queue_packet(QueuedPacket(TIMER_ADDR, PT_STRIKE))
+
+    def stop(self, _source: int, _dest: int, _payload: bytes) -> bool:
+        self.set_mode(MODE_SLEEP)
+        return False

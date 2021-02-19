@@ -1,8 +1,22 @@
 from machine import Pin
+import struct
 
-from hardware import KtaneHardware, MODE_ARMED
+from hardware import (
+    KtaneHardware,
+    MODE_ARMED,
+    PT_REQUEST_ID,
+    MT_WIRES,
+    PT_RESPONSE_ID,
+    FLAG_TRIGGER,
+    PT_CONFIGURE,
+    PT_START,
+    QueuedPacket,
+    TIMER_ADDR,
+    MODE_SLEEP,
+)
 
 # Constants:
+CONFIG_FILENAME = "config.txt"
 POSTS = (2, 3, 4, 5, 6, 7)
 WIRES = (10, 11, 12, 13, 14, 20, 19, 18, 17, 16)
 
@@ -16,11 +30,12 @@ COLOR_POSITIONS = [BLACK, BLACK, BLUE, BLUE, RED, RED, WHITE, WHITE, YELLOW, YEL
 
 
 class WireModule(KtaneHardware):
-    serial_number: bytes  # TODO
     should_cut: int
 
-    def __init__(self, addr: int) -> None:
-        KtaneHardware.__init__(self, addr)
+    def __init__(self) -> None:
+        KtaneHardware.__init__(self, self.read_config())
+        self.handlers.update({PT_REQUEST_ID: self.request_id, PT_CONFIGURE: self.configure, PT_START: self.start})
+        self.serial_number = b""
         self.posts = [Pin(pin_num, Pin.IN, Pin.PULL_UP) for pin_num in POSTS]
         self.wires = [Pin(pin_num, Pin.OUT) for pin_num in WIRES]
 
@@ -35,6 +50,41 @@ class WireModule(KtaneHardware):
                     break
 
         self.colors = [COLOR_POSITIONS[mapping] for mapping in self.mapping if mapping is not None]
+
+    @staticmethod
+    def read_config() -> int:
+        # Format:
+        #
+        # Field    Length   Notes
+        # ------   ------   ---------------------------------------------
+        # unique   1        Unique portion of ID, assigned at manufacture
+        unique = b""
+        try:
+            file_obj = open(CONFIG_FILENAME, "rb")
+            unique = file_obj.read(1)
+            file_obj.close()
+        except OSError:
+            pass
+
+        return (MT_WIRES << 8) | (ord(unique) if unique else 0x00)
+
+    def request_id(self, source: int, _dest: int, _payload: bytes) -> bool:
+        self.send_without_queuing(source, PT_RESPONSE_ID, struct.pack("BB", FLAG_TRIGGER, 0))
+        return True
+
+    def configure(self, _source: int, _dest: int, payload: bytes) -> bool:
+        # Payload is the serial number
+        self.serial_number = payload
+        return False
+
+    def start(self, _source: int, _dest: int, _payload: bytes) -> bool:
+        # Payload is the difficulty but we're not adjustable so we ignore it
+        if self.serial_number and self.determine_correct_wire():
+            self.set_mode(MODE_ARMED)
+        else:
+            self.unable_to_arm()
+            self.set_mode(MODE_SLEEP)
+        return False
 
     def determine_correct_wire(self) -> bool:
         num_wires = len(self.colors)
