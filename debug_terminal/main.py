@@ -9,9 +9,10 @@ import wx
 
 # Constants:
 PORT = "COM4"
-BAUD = 38400
+BAUD = 115200
 SERIAL_TIMEOUT = 1.0
-MAX_LOG_LINES = 10
+MAX_LOG_LINES = 20
+BROADCAST = 0xFFFF
 
 
 def listener(port: str, outgoing: Queue, incoming: Callable):
@@ -34,27 +35,29 @@ def listener(port: str, outgoing: Queue, incoming: Callable):
 
 
 class PacketType(Enum):
-    REQUEST_ID = 0
-    RESPONSE_ID = 1
-    STOP = 2
-    START = 3
-    STRIKE = 4
-    ERROR = 5
-    DEFUSED = 6
-    NEEDY = 7
-    READ_STATUS = 8
-    STATUS = 9
-    SOUND_REQUEST = 10
+    ACK = 0x80
+    REQUEST_ID = 0x01
+    RESPONSE_ID = 0x81
+    STOP = 0x02
+    CONFIGURE = 0x03
+    START = 0x04
+    STRIKE = 0x05
+    ERROR = 0x06
+    DEFUSED = 0x07
+    NEEDY = 0x08
+    READ_STATUS = 0x09
+    STATUS = 0x89
+    SOUND_REQUEST = 0x0A
 
 
 @attr.s(repr=False)
 class Packet:
-    data: bytes = attr.ib(default=b"")
-    source: int = attr.ib(default=0)
-    dest: int = attr.ib(default=0)
     packet_type: Optional[PacketType] = attr.ib(default=None)
+    dest: int = attr.ib(default=0)
     seq_num: int = attr.ib(default=0)
     payload: bytes = attr.ib(default=b"")
+    data: bytes = attr.ib(default=b"")
+    source: int = attr.ib(default=0)
 
     def __repr__(self) -> str:
         if self.packet_type is None:
@@ -107,9 +110,11 @@ class TermFrame(wx.Frame):
         button = wx.Button(self, label="REQUEST_ID")
         button.Bind(wx.EVT_BUTTON, self.on_request_id)
         sizer3.Add(button, 0, wx.EXPAND, 0)
-        button = wx.Button(self, label="BUTTON 2")
+        button = wx.Button(self, label="CONFIGURE")
+        button.Bind(wx.EVT_BUTTON, self.on_configure)
         sizer3.Add(button, 0, wx.EXPAND | wx.TOP, 10)
-        button = wx.Button(self, label="BUTTON 3")
+        button = wx.Button(self, label="START")
+        button.Bind(wx.EVT_BUTTON, self.on_start)
         sizer3.Add(button, 0, wx.EXPAND | wx.TOP, 10)
         button = wx.Button(self, label="BUTTON 4")
         sizer3.Add(button, 0, wx.EXPAND | wx.TOP, 10)
@@ -125,14 +130,32 @@ class TermFrame(wx.Frame):
         self.log_ctrl.SetValue("\n".join([repr(packet) for packet in self.log_lines]))
 
     def on_request_id(self, _event: wx.CommandEvent):
-        packet = Packet(dest=0xFFFF, packet_type=PacketType.REQUEST_ID)
         app: TerminalApp = wx.GetApp()
+        app.seq_num = (app.seq_num + 1) & 0xFF
+        packet = Packet(PacketType.REQUEST_ID, BROADCAST, app.seq_num)
+        app.outgoing.put(packet)
+        self.add(packet)
+
+    def on_configure(self, _event: wx.CommandEvent):
+        app: TerminalApp = wx.GetApp()
+        app.seq_num = (app.seq_num + 1) & 0xFF
+        packet = Packet(PacketType.CONFIGURE, 0x0100, app.seq_num, b"12345")
+        app.outgoing.put(packet)
+        self.add(packet)
+
+    def on_start(self, _event: wx.CommandEvent):
+        app: TerminalApp = wx.GetApp()
+        app.seq_num = (app.seq_num + 1) & 0xFF
+        packet = Packet(PacketType.START, BROADCAST, app.seq_num, b"\x00")
         app.outgoing.put(packet)
         self.add(packet)
 
 
 class TerminalApp(wx.App):
+    seq_num: int
+
     def OnInit(self):
+        self.seq_num = 0
         self.frame = TermFrame(None, title="KTANE Terminal")
         self.frame.Show()
         self.frame.Bind(wx.EVT_CLOSE, self.on_close)
@@ -145,8 +168,25 @@ class TerminalApp(wx.App):
         event.Skip()
         self.outgoing.put(None)
 
+    def send_ack(self, dest: int, seq_num: int):
+        packet = Packet(PacketType.ACK, dest, seq_num)
+        self.outgoing.put(packet)
+        self.frame.add(packet)
+
+    def send_stop(self):
+        self.seq_num = (self.seq_num + 1) & 0xFF
+        packet = Packet(PacketType.STOP, BROADCAST, self.seq_num)
+        self.outgoing.put(packet)
+        self.frame.add(packet)
+
     def incoming(self, data: bytes):
-        self.frame.add(data)
+        packet = Packet(data=data)
+        self.frame.add(packet)
+        if packet.packet_type != PacketType.ACK:
+            self.seq_num = packet.seq_num
+        if packet.packet_type == PacketType.ERROR:
+            self.send_ack(packet.source, packet.seq_num)
+            self.send_stop()
 
 
 if __name__ == "__main__":

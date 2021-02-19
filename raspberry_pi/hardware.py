@@ -4,6 +4,9 @@ from random import randrange
 import struct
 from time import time
 
+LOG = print
+# LOG = lambda *args: None
+
 # Constants:
 UART_NUM = 1
 BAUD_RATE = 115200
@@ -14,6 +17,7 @@ ONE_FRAME = 10 / BAUD_RATE * 1000.0
 TWO_FRAMES = int(ceil(10 / BAUD_RATE * 1000.0))
 BACKOFF_TIME = (1, 5)
 BCAST_REPLY_BACKOFF = (1, 50)
+INITIAL_RETRY_TIME = 2  # 2s
 RETRY_TIME = 1  # 1s
 TIMER_ADDR = 0x0000
 BROADCAST_ALL = 0xFFFF
@@ -79,7 +83,6 @@ class QueuedPacket:
 
 class KtaneHardware:
     mode: int
-    next_retry: int
     reply_storage: bytes
 
     def __init__(self, addr: int) -> None:
@@ -90,26 +93,30 @@ class KtaneHardware:
         self.status_green = Pin(STATUS_GREEN, Pin.IN)
         self.handlers = {PT_STOP: self.stop}
         self.last_seq_seen = 0
+        self.next_retry = None
         self.awaiting_ack_of_seq = self.queued_packet = None
         self.set_mode(MODE_SLEEP)
 
     def set_mode(self, mode: int) -> None:
         self.mode = mode
         if mode == MODE_SLEEP:
+            LOG("sleep")
             self.status_green.init(Pin.IN)
             self.status_red.init(Pin.IN)
         elif mode in [MODE_ARMED, MODE_READY]:
+            LOG("armed or ready")
             self.status_green.init(Pin.IN)
             self.status_red.init(Pin.OUT)
             self.status_red.off()  # active low
         elif mode == MODE_DISARMED:
+            LOG("disarmed")
             self.status_green.init(Pin.OUT)
             self.status_red.init(Pin.IN)
             self.status_green.off()  # active low
 
     def queue_packet(self, packet: QueuedPacket) -> None:
         self.queued_packet = packet
-        self.retry_now()
+        self.retry_now(INITIAL_RETRY_TIME)
 
     def send_ack(self, dest: int, seq_num: int) -> None:
         self.send(dest, PT_ACK, seq_num)
@@ -119,11 +126,11 @@ class KtaneHardware:
         self.last_seq_seen = seq_num
         self.send(dest, packet_type, seq_num, payload)
 
-    def retry_now(self) -> None:
+    def retry_now(self, retry_time: int = RETRY_TIME) -> None:
         seq_num = (self.last_seq_seen + 1) & 0xFF
         self.last_seq_seen = self.awaiting_ack_of_seq = seq_num
         self.send(self.queued_packet.dest, self.queued_packet.packet_type, seq_num, self.queued_packet.payload)
-        self.next_retry = time() + RETRY_TIME
+        self.next_retry = time() + retry_time
 
     def send_block_return_response(self, packet: QueuedPacket):
         self.queued_packet = packet
@@ -152,51 +159,54 @@ class KtaneHardware:
         if self.uart.any():
             # Yes, read length
             packet: bytes = self.uart.read(1)
-            length = 1 + packet[0] + 2  # Length, packet, checksum
+            if packet != b"\x00":
+                length = 1 + packet[0] + 2  # Length, packet, checksum
 
-            # Read remainder
-            while len(packet) < length:
-                # Anything queued?
-                if self.uart.any():
-                    # Read it in
-                    packet += self.uart.read(1)
+                # Read remainder
+                while len(packet) < length:
+                    # Anything queued?
+                    if self.uart.any():
+                        # Read it in
+                        packet += self.uart.read(1)
+                    else:
+                        # Nothing is queued. Wait two frame times.
+                        lightsleep(TWO_FRAMES)
+
+                        # Is anything queued now?
+                        if not self.uart.any():
+                            # Still nothing, abort the packet
+                            LOG("packet aborted %r" % packet)
+                            break
                 else:
-                    # Nothing is queued. Wait two frame times.
-                    lightsleep(TWO_FRAMES)
+                    # Is the checksum okay?
+                    (checksum,) = struct.unpack("<H", packet[-2:])
+                    checksum += sum(packet[:-2])
+                    if checksum == 0xFFFF:
+                        # Checksum is okay. Save the sequence number.
+                        source, dest, packet_type, seq_num = struct.unpack("<HHBB", packet[1:7])
+                        payload = packet[7:-2]
+                        if (packet_type & PT_RESPONSE_MASK) == 0:
+                            self.last_seq_seen = seq_num
 
-                    # Is anything queued now?
-                    if not self.uart.any():
-                        # Still nothing, abort the packet
-                        break
-            else:
-                # Is the checksum okay?
-                (checksum,) = struct.unpack("<H", packet[-2:])
-                checksum += sum(packet[:-2])
-                if checksum == 0xFFFF:
-                    # Checksum is okay. Save the sequence number.
-                    source, dest, packet_type, seq_num = struct.unpack("<HHBB", packet[1:7])
-                    payload = packet[7:-2]
-                    if (packet_type & PT_RESPONSE_MASK) == 0:
-                        self.last_seq_seen = seq_num
+                        # Is it for us?
+                        if (dest == self.addr) or (dest == BROADCAST_ALL) or (dest == (self.addr | BROADCAST_MASK)):
+                            # Yes, for us. Was it a response?
+                            if (
+                                self.queued_packet
+                                and (packet_type & PT_RESPONSE_MASK)
+                                and (source == self.queued_packet.dest)
+                                and (seq_num == self.awaiting_ack_of_seq)
+                            ):
+                                self.queued_packet = self.awaiting_ack_of_seq = self.next_retry = None
+                                self.reply_storage = payload
 
-                    # Is it for us?
-                    if (dest == self.addr) or (dest == BROADCAST_ALL) or (dest == (self.addr | BROADCAST_MASK)):
-                        # Yes, for us. Was it a response?
-                        if (
-                            self.queued_packet
-                            and (packet_type & PT_RESPONSE_MASK)
-                            and (source == self.queued_packet.dest)
-                            and (seq_num == self.awaiting_ack_of_seq)
-                        ):
-                            self.queued_packet = self.awaiting_ack_of_seq = self.next_retry = None
-                            self.reply_storage = payload
-
-                        # Do we have a handler?
-                        handler = self.handlers.get(packet_type)
-                        if handler:
-                            # We have a handler. Hand off the packet. It will return a True if it took care of ACKing.
-                            if not handler(source, dest, payload) and ((dest & BROADCAST_MASK) != BROADCAST_MASK):
-                                self.send_ack(source, seq_num)
+                            # Do we have a handler?
+                            handler = self.handlers.get(packet_type)
+                            if handler:
+                                # We have a handler. Hand off the packet. It will return a True if it took care of
+                                # ACKing.
+                                if not handler(source, dest, payload) and ((dest & BROADCAST_MASK) != BROADCAST_MASK):
+                                    self.send_ack(source, seq_num)
 
         # Need to retry?
         if (self.next_retry is not None) and (time() >= self.next_retry):
@@ -226,15 +236,19 @@ class KtaneHardware:
         self.tx_en.off()
 
     def unable_to_arm(self) -> None:
+        LOG("error")
         self.queue_packet(QueuedPacket(TIMER_ADDR, PT_ERROR))
 
     def disarmed(self):
+        LOG("disarmed")
         self.queue_packet(QueuedPacket(TIMER_ADDR, PT_DEFUSED))
         self.set_mode(MODE_DISARMED)
 
     def strike(self):
+        LOG("strike")
         self.queue_packet(QueuedPacket(TIMER_ADDR, PT_STRIKE))
 
     def stop(self, _source: int, _dest: int, _payload: bytes) -> bool:
+        LOG("stop")
         self.set_mode(MODE_SLEEP)
         return False

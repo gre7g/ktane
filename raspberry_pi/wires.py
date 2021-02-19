@@ -10,8 +10,7 @@ from hardware import (
     FLAG_TRIGGER,
     PT_CONFIGURE,
     PT_START,
-    QueuedPacket,
-    TIMER_ADDR,
+    LOG,
     MODE_SLEEP,
 )
 
@@ -69,16 +68,19 @@ class WireModule(KtaneHardware):
         return (MT_WIRES << 8) | (ord(unique) if unique else 0x00)
 
     def request_id(self, source: int, _dest: int, _payload: bytes) -> bool:
+        LOG("request_id")
         self.send_without_queuing(source, PT_RESPONSE_ID, struct.pack("BB", FLAG_TRIGGER, 0))
         return True
 
     def configure(self, _source: int, _dest: int, payload: bytes) -> bool:
         # Payload is the serial number
         self.serial_number = payload
+        LOG("configure", payload)
         return False
 
     def start(self, _source: int, _dest: int, _payload: bytes) -> bool:
         # Payload is the difficulty but we're not adjustable so we ignore it
+        LOG("start")
         if self.serial_number and self.determine_correct_wire():
             self.set_mode(MODE_ARMED)
         else:
@@ -90,7 +92,6 @@ class WireModule(KtaneHardware):
         num_wires = len(self.colors)
         last_serial_digit_odd = self.serial_number[-1] in b"13579"
         if num_wires < 3:
-            self.unable_to_arm()
             return False
         elif num_wires == 3:
             if RED not in self.colors:  # No red
@@ -152,6 +153,8 @@ class WireModule(KtaneHardware):
         else:
             # Wire number (Warning: wire #1 means index 0!)
             self.should_cut = mapping_skip_nones[wire_number - 1]
+
+        LOG("should_cut=", self.should_cut)
 
     def count_num_of(self, color_to_count: int) -> int:
         return len(1 for color in self.colors if color == color_to_count)
