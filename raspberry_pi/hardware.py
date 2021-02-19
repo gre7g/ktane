@@ -4,8 +4,8 @@ from random import randrange
 import struct
 from time import time
 
-LOG = print
-# LOG = lambda *args: None
+# LOG = print
+LOG = lambda *args: None
 
 # Constants:
 UART_NUM = 1
