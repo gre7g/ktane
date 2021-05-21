@@ -40,6 +40,11 @@ class Signal:
 class Timer:
     PERIODIC = ONE_SHOT = None
 
+    def __init__(
+        self, freq: Optional[int] = None, period: Optional[int] = None, mode=None, callback: Optional[Callable] = None
+    ):
+        pass
+
     def init(
         self, freq: Optional[int] = None, period: Optional[int] = None, mode=None, callback: Optional[Callable] = None
     ):

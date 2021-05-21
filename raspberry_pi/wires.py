@@ -29,6 +29,10 @@ YELLOW = 4
 
 COLOR_POSITIONS = [BLACK, BLACK, BLUE, BLUE, RED, RED, WHITE, WHITE, YELLOW, YELLOW]
 
+QUEUE_NOTHING = 0
+QUEUE_STRIKE = 1
+QUEUE_DISARMED = 2
+
 
 class WireModule(KtaneHardware):
     right_post: int
@@ -46,6 +50,7 @@ class WireModule(KtaneHardware):
                 PT_DISARMED: self.disarmed,
             }
         )
+        self.queued = QUEUE_NOTHING
         self.serial_number = b""
         self.post_pins = [Pin(pin_num, Pin.IN, Pin.PULL_UP) for pin_num in POSTS]
         self.posts = [Signal(pin, invert=True) for pin in self.post_pins]
@@ -88,6 +93,13 @@ class WireModule(KtaneHardware):
             self.unable_to_arm()
             self.set_mode(MODE_SLEEP)
         return False
+
+    def poll(self) -> None:
+        if self.queued == QUEUE_STRIKE:
+            self.strike()
+        elif self.queued == QUEUE_DISARMED:
+            self.disarmed()
+        KtaneHardware.poll(self)
 
     def disable_irqs(self):
         # Disable handlers
@@ -204,6 +216,7 @@ class WireModule(KtaneHardware):
     def count_num_of(self, color_to_count: int) -> int:
         return sum(1 for color in self.colors if color == color_to_count)
 
+    # Called during an interrupt! Don't allocate memory or waste time!
     def pin_fired(self, pin) -> bool:
         for index, post in enumerate(self.post_pins):
             if pin == post:
@@ -215,14 +228,16 @@ class WireModule(KtaneHardware):
         else:
             return False
 
+    # Called during an interrupt! Don't allocate memory or waste time!
     def on_wrong_post(self, pin):
         if self.pin_fired(pin):
             LOG.info("wrong pin")
             pin.irq(None)
-            self.strike()
+            self.queued = QUEUE_STRIKE
 
+    # Called during an interrupt! Don't allocate memory or waste time!
     def on_right_post(self, pin):
         if self.pin_fired(pin):
             LOG.info("right pin")
             pin.irq(None)
-            self.disarmed()
+            self.queued = QUEUE_DISARMED

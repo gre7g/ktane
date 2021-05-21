@@ -61,6 +61,23 @@ class MorseModule(KtaneHardware):
         ROTARY2.irq(self.on_rotary)
         self.display_freq()
 
+    @staticmethod
+    def read_config() -> int:
+        # Format:
+        #
+        # Field    Length   Notes
+        # ------   ------   ---------------------------------------------
+        # unique   1        Unique portion of ID, assigned at manufacture
+        unique = b""
+        try:
+            file_obj = open(CONFIG_FILENAME, "rb")
+            unique = file_obj.read(1)
+            file_obj.close()
+        except OSError:
+            pass
+
+        return (MT_MORSE << 8) | (ord(unique) if unique else 0x00)
+
     # Called during an interrupt! Don't allocate memory or waste time!
     def on_rx(self, _pin):
         if BUTTON_RX.value():
@@ -101,20 +118,3 @@ class MorseModule(KtaneHardware):
                 self.value -= 1
                 self.display_freq()
             self.offset = 0
-
-    @staticmethod
-    def read_config() -> int:
-        # Format:
-        #
-        # Field    Length   Notes
-        # ------   ------   ---------------------------------------------
-        # unique   1        Unique portion of ID, assigned at manufacture
-        unique = b""
-        try:
-            file_obj = open(CONFIG_FILENAME, "rb")
-            unique = file_obj.read(1)
-            file_obj.close()
-        except OSError:
-            pass
-
-        return (MT_MORSE << 8) | (ord(unique) if unique else 0x00)

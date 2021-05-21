@@ -44,8 +44,7 @@ class SevenSegment:
     def start(self, frequency):
         if self.timer is None:
             # Enable timer
-            self.timer = Timer()
-            self.timer.init(freq=frequency, mode=Timer.PERIODIC, callback=self.update)
+            self.timer = Timer(freq=frequency, mode=Timer.PERIODIC, callback=self.update)
 
     def stop(self):
         if self.timer:
