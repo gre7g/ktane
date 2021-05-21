@@ -50,6 +50,9 @@ class Timer:
     ):
         pass
 
+    def deinit(self):
+        pass
+
 
 class UART:
     def __init__(

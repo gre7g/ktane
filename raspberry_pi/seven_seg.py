@@ -39,6 +39,7 @@ class SevenSegment:
         self.digit = 0
         self.value = self.workspace
         self.decimal_pos = None
+        self.colon = False
         self.start(frequency)
 
     def start(self, frequency):
@@ -58,7 +59,7 @@ class SevenSegment:
             self.timer = None
 
     # Called during an interrupt! Don't allocate memory or waste time!
-    def display(self, value, decimal_pos=None, minimum_digits=1):
+    def display(self, value, decimal_pos=None, minimum_digits=1, colon=False):
         """Change the display
 
         :param list|int value: New value to be displayed
@@ -77,6 +78,7 @@ class SevenSegment:
                 self.value[3 - index] = digit
 
         self.decimal_pos = decimal_pos
+        self.colon = colon
 
     # Called during an interrupt! Don't allocate memory or waste time!
     def update(self, _timer=None):
@@ -91,7 +93,9 @@ class SevenSegment:
         segments = MASK_BY_DIGIT[self.value[self.digit]]
         for segment in range(7):
             SEGMENTS[segment].value(segments & (1 << segment))
-        DP.value(self.digit == self.decimal_pos)
+        DP.value((self.digit + 1) == self.decimal_pos)
+
+        COLON.value(self.colon and (self.digit % 2))
 
         # Enable current digit
         DIGITS[self.digit].on()
