@@ -1,4 +1,4 @@
-from machine import Pin, Signal, Timer
+from machine import Pin, Signal, Timer, disable_irq, enable_irq
 from random import choice
 import struct
 
@@ -49,7 +49,7 @@ class ButtonModule(KtaneHardware):
         self.num_batteries = 0
         self.indicator_lit = False
         self.indicator_label = b""
-        self.strip_color = choice(STRIP_COLORS)
+        self.strip_color = None
         self.button_pushed = False
         BUTTON_PIN.irq(self.on_button)
         self.set_strip(LED_MAP[CONSTANTS.COLORS.BLACK])
@@ -103,6 +103,7 @@ class ButtonModule(KtaneHardware):
         # Payload is the difficulty but we're not adjustable so we ignore it
         LOG.debug("start")
         if self.button_color is not None:
+            self.strip_color = choice(STRIP_COLORS)
             self.set_mode(CONSTANTS.MODES.ARMED)
         else:
             self.unable_to_arm()
@@ -178,7 +179,7 @@ class ButtonModule(KtaneHardware):
         else:
             self.check_time(time)
 
-        return False
+        return True  # The status message is essentiall an ACK, so no additional ACK is required
 
     def check_time(self, time: bytes):
         if self.strip_color == CONSTANTS.COLORS.BLUE:
@@ -190,7 +191,9 @@ class ButtonModule(KtaneHardware):
         else:
             match = b"1" in time
 
+        state = disable_irq()
         if match:
-            self.disarmed()
+            self.queued |= CONSTANTS.QUEUED_TASKS.DISARMED
         else:
-            self.strike()
+            self.queued |= CONSTANTS.QUEUED_TASKS.STRIKE
+        enable_irq(state)
