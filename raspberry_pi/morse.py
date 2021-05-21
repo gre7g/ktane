@@ -1,4 +1,4 @@
-from machine import Pin, lightsleep
+from machine import Pin, lightsleep, Signal
 
 from hardware import KtaneHardware, MT_MORSE
 from seven_seg import SevenSegment
@@ -55,8 +55,10 @@ LAST_FREQ = len(FREQUENCIES) - 1
 
 ROTARY1 = Pin(2, Pin.IN, Pin.PULL_UP)
 ROTARY2 = Pin(7, Pin.IN, Pin.PULL_UP)
-BUTTON_RX = Pin(3, Pin.IN, Pin.PULL_UP)
-BUTTON_TX = Pin(5, Pin.IN, Pin.PULL_UP)
+BUTTON_RX_PIN = Pin(3, Pin.IN, Pin.PULL_UP)
+BUTTON_RX = Signal(BUTTON_RX_PIN, invert=True)
+BUTTON_TX_PIN = Pin(5, Pin.IN, Pin.PULL_UP)
+BUTTON_TX = Signal(BUTTON_TX_PIN, invert=True)
 
 
 class MorseModule(KtaneHardware):
@@ -66,7 +68,24 @@ class MorseModule(KtaneHardware):
         self.curr_phase = self.phase()
         self.value = 0
         self.offset = 0
-        self.display()
+        BUTTON_RX_PIN.irq(self.on_rx)
+        BUTTON_TX_PIN.irq(self.on_tx)
+        self.display_freq()
+
+    def on_rx(self, pin):
+        if BUTTON_RX.value():
+            self.seven_seg.display("r   ")
+        else:
+            self.display_freq()
+
+    def on_tx(self, pin):
+        if BUTTON_TX.value():
+            self.seven_seg.display("  t ")
+        else:
+            self.display_freq()
+
+    def display_freq(self):
+        self.seven_seg.display(FREQUENCIES[self.value], 3)
 
     def poll(self) -> None:
         # Is the knob turning?
@@ -83,17 +102,6 @@ class MorseModule(KtaneHardware):
             elif (self.offset < 0) and (self.value > 0):
                 self.value -= 1
             self.offset = 0
-
-        self.display()
-
-    def display(self):
-        # What should we display?
-        if not BUTTON_RX.value():
-            self.seven_seg.display("r   ")
-        elif not BUTTON_TX.value():
-            self.seven_seg.display("  t ")
-        else:
-            self.seven_seg.display(FREQUENCIES[self.value], 3)
 
     @staticmethod
     def phase() -> int:
