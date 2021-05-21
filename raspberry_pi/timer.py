@@ -19,7 +19,6 @@ class TimerModule(KtaneHardware):
     def start_timer(self, time: int):
         if not self.timer:
             self.hundredths_mode = time < SWITCH_TO_HUNDREDTHS
-            # self.timer = Timer(mode=Timer.PERIODIC, freq= 100, callback=self.on_timer)
             self.timer = Timer(mode=Timer.PERIODIC, freq=1 if self.hundredths_mode else 100, callback=self.on_timer)
             self.stop_time = ticks_us() + time
             self.on_timer()
