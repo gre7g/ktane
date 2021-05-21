@@ -1,6 +1,7 @@
 from machine import Pin, lightsleep
 
 from hardware import KtaneHardware, MT_MORSE
+from seven_seg import SevenSegment
 
 # Constants:
 CONFIG_FILENAME = "config.txt"
@@ -56,38 +57,16 @@ ROTARY1 = Pin(2, Pin.IN, Pin.PULL_UP)
 ROTARY2 = Pin(7, Pin.IN, Pin.PULL_UP)
 BUTTON_RX = Pin(3, Pin.IN, Pin.PULL_UP)
 BUTTON_TX = Pin(5, Pin.IN, Pin.PULL_UP)
-SEG_D1 = Pin(18, Pin.OUT)
-SEG_D1.on()
-SEG_D2 = Pin(16, Pin.OUT)
-SEG_D2.on()
-SEG_D3 = Pin(22, Pin.OUT)
-SEG_D3.on()
-SEG_D4 = Pin(17, Pin.OUT)
-SEG_D4.on()
-SEG_A = Pin(14, Pin.OUT)
-SEG_B = Pin(12, Pin.OUT)
-SEG_C = Pin(20, Pin.OUT)
-SEG_D = Pin(10, Pin.OUT)
-SEG_E = Pin(11, Pin.OUT)
-SEG_F = Pin(19, Pin.OUT)
-SEG_G = Pin(13, Pin.OUT)
-DP = Pin(4, Pin.OUT)
-COLON = Pin(6, Pin.OUT)
-COLON.on()
-L3 = Pin(21, Pin.OUT)
-L3.on()
-DIGITS = [SEG_D1, SEG_D2, SEG_D3, SEG_D4]
 
 
 class MorseModule(KtaneHardware):
     def __init__(self) -> None:
         KtaneHardware.__init__(self, self.read_config())
-        for pin in SEG_D1, SEG_D2, SEG_D3, SEG_D4, SEG_A, SEG_B, SEG_C, SEG_D, SEG_E, SEG_F, SEG_G, DP, COLON, L3:
-            pin.on()
+        self.seven_seg = SevenSegment()
         self.curr_phase = self.phase()
         self.value = 0
         self.offset = 0
-        self.decimals = 3
+        self.display()
 
     def poll(self) -> None:
         # Is the knob turning?
@@ -105,52 +84,16 @@ class MorseModule(KtaneHardware):
                 self.value -= 1
             self.offset = 0
 
+        self.display()
+
+    def display(self):
         # What should we display?
         if not BUTTON_RX.value():
-            value = "r   "
-            decimal_pos = None
+            self.seven_seg.display("r   ")
         elif not BUTTON_TX.value():
-            value = "  t "
-            decimal_pos = None
+            self.seven_seg.display("  t ")
         else:
-            value = FREQUENCIES[self.value]
-            decimal_pos = 3 - self.decimals
-
-        # Convert numeric display to string
-        if isinstance(value, int):
-            value = str(value)
-            if decimal_pos is not None:
-                more_zeroes = 4 - len(value) - decimal_pos
-                if more_zeroes > 0:
-                    value = ("0" * more_zeroes) + value
-            more_spaces = 4 - len(value)
-            if more_spaces > 0:
-                value = (" " * more_spaces) + value
-
-        # Display
-        for index, pin in enumerate(DIGITS):
-            digit = MASK_BY_DIGIT[value[index]]
-            for segment in SEG_A, SEG_B, SEG_C, SEG_D, SEG_E, SEG_F, SEG_G, DP:
-                segment.on()
-            pin.off()
-            if digit & 0x40:
-                SEG_A.off()
-            if digit & 0x20:
-                SEG_B.off()
-            if digit & 0x10:
-                SEG_C.off()
-            if digit & 0x08:
-                SEG_D.off()
-            if digit & 0x04:
-                SEG_E.off()
-            if digit & 0x02:
-                SEG_F.off()
-            if digit & 0x01:
-                SEG_G.off()
-            DP.value(index != decimal_pos)
-            KtaneHardware.poll(self)
-            lightsleep(1)
-            pin.on()
+            self.seven_seg.display(FREQUENCIES[self.value], 3)
 
     @staticmethod
     def phase() -> int:
