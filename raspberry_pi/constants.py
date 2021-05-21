@@ -62,8 +62,8 @@ class CONSTANTS:
             SOUND = 0x0A
 
         class TIMING:
-            BACKOFF_TIME = (1, 5)
-            BCAST_REPLY_BACKOFF = (1, 50)
+            BACKOFF_TIME = (1, 5000)
+            BCAST_REPLY_BACKOFF = (1, 50000)
             INITIAL_RETRY_US = 2000000  # 2s
             RETRY_US = 1000000  # 1s
 
@@ -71,7 +71,7 @@ class CONSTANTS:
         NOTHING = 0x00
         STRIKE = 0x01
         DISARMED = 0x02
-        ASK_TIME = 0x04
+        READ_STATUS = 0x04
 
     class SEVEN_SEGMENT:
         BLANK = 10

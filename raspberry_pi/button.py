@@ -16,6 +16,7 @@ STRIP_COLORS = [
     CONSTANTS.COLORS.GREEN,
 ]
 LED_MAP = {
+    CONSTANTS.COLORS.BLACK: 0x0,
     CONSTANTS.COLORS.BLUE: 0x1,
     CONSTANTS.COLORS.WHITE: 0x7,
     CONSTANTS.COLORS.YELLOW: 0x6,
@@ -49,7 +50,9 @@ class ButtonModule(KtaneHardware):
         self.indicator_lit = False
         self.indicator_label = b""
         self.strip_color = choice(STRIP_COLORS)
+        self.button_pushed = False
         BUTTON_PIN.irq(self.on_button)
+        self.set_strip(LED_MAP[CONSTANTS.COLORS.BLACK])
 
     @staticmethod
     def read_config() -> int:
@@ -89,9 +92,10 @@ class ButtonModule(KtaneHardware):
             self.button_color,
             self.button_text,
             self.num_batteries,
-            self.indicator_lit,
+            indicator_lit,
             self.indicator_label,
-        ) = struct.unpack("<B8sB?3s", payload)
+        ) = struct.unpack("<B8sBB3s", payload)
+        self.indicator_lit = bool(indicator_lit)
         LOG.debug("configure", payload)
         return False
 
@@ -115,28 +119,35 @@ class ButtonModule(KtaneHardware):
     # Called during an interrupt! Don't allocate memory or waste time!
     def on_button(self, _pin=None):
         if not self.debouncing:
-            self.debouncing = True
-            Timer(period=DEBOUNCE_MS, mode=Timer.ONE_SHOT, callback=self.on_debounce)
-            if BUTTON.value():
-                self.pushed()
-            else:
-                self.released()
+            button = BUTTON.value()
+            if self.button_pushed != button:
+                self.debouncing = True
+                Timer(period=DEBOUNCE_MS, mode=Timer.ONE_SHOT, callback=self.on_debounce)
+                self.button_pushed = button
+                if button:
+                    self.pushed()
+                else:
+                    self.released()
 
     # Called during an interrupt! Don't allocate memory or waste time!
-    def pushed(self):
-        rgb = LED_MAP[self.strip_color]
+    def set_strip(self, rgb: int):
         for index in range(4):
             RED_LEDS[index].value(rgb & 0x4)
             GREEN_LEDS[index].value(rgb & 0x2)
             BLUE_LEDS[index].value(rgb & 0x1)
 
     # Called during an interrupt! Don't allocate memory or waste time!
-    def released(self):
-        for led in RED_LEDS + GREEN_LEDS + BLUE_LEDS:
-            led.off()
-        self.queued |= CONSTANTS.QUEUED_TASKS.ASK_TIME
+    def pushed(self):
+        LOG.info("pushed")
+        self.set_strip(LED_MAP[self.strip_color])
 
-    def status(self, _dest: int, _packet_type: int, _seq_num: int, payload: bytes = b"") -> None:
+    # Called during an interrupt! Don't allocate memory or waste time!
+    def released(self):
+        LOG.info("released")
+        self.set_strip(LED_MAP[CONSTANTS.COLORS.BLACK])
+        self.queued |= CONSTANTS.QUEUED_TASKS.READ_STATUS
+
+    def status(self, _source: int, _dest: int, payload: bytes = b"") -> bool:
         # Payload:
         #
         # Field     Length   Notes
@@ -144,7 +155,8 @@ class ButtonModule(KtaneHardware):
         # running   1        True is the game is in play
         # strikes   1        Number of strikes
         # time      5        Time as a string, like " 1:12" or "16.92"
-        _running, _strikes, time = struct.unpack("<?B5s", payload)
+        LOG.debug("status", payload)
+        _running, _strikes, time = struct.unpack("<BB5s", payload)
 
         # Game logic
         if (self.button_color == CONSTANTS.COLORS.BLUE) and (self.button_text == CONSTANTS.LABELS.ABORT):
@@ -165,6 +177,8 @@ class ButtonModule(KtaneHardware):
             self.disarmed()
         else:
             self.check_time(time)
+
+        return False
 
     def check_time(self, time: bytes):
         if self.strip_color == CONSTANTS.COLORS.BLUE:

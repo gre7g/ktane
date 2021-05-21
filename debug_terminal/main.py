@@ -28,6 +28,7 @@ def listener(port: str, outgoing: Queue, incoming: Callable):
             else:
                 packet: Optional[Packet] = outgoing.get()
                 if packet:
+                    print("out", packet)
                     serial.write(packet.to_bytes())
                 else:
                     break
@@ -111,8 +112,11 @@ class TermFrame(wx.Frame):
         button = wx.Button(self, label="REQUEST_ID")
         button.Bind(wx.EVT_BUTTON, self.on_request_id)
         sizer3.Add(button, 0, wx.EXPAND, 0)
-        button = wx.Button(self, label="CONFIGURE")
-        button.Bind(wx.EVT_BUTTON, self.on_configure)
+        button = wx.Button(self, label="CONFIGURE1")
+        button.Bind(wx.EVT_BUTTON, self.on_configure1)
+        sizer3.Add(button, 0, wx.EXPAND | wx.TOP, 10)
+        button = wx.Button(self, label="CONFIGURE2")
+        button.Bind(wx.EVT_BUTTON, self.on_configure2)
         sizer3.Add(button, 0, wx.EXPAND | wx.TOP, 10)
         button = wx.Button(self, label="START")
         button.Bind(wx.EVT_BUTTON, self.on_start)
@@ -138,10 +142,17 @@ class TermFrame(wx.Frame):
         app.outgoing.put(packet)
         self.add(packet)
 
-    def on_configure(self, _event: wx.CommandEvent):
+    def on_configure1(self, _event: wx.CommandEvent):
         app: TerminalApp = wx.GetApp()
         app.seq_num = (app.seq_num + 1) & 0xFF
         packet = Packet(PacketType.CONFIGURE, 0x0100, app.seq_num, b"12345")
+        app.outgoing.put(packet)
+        self.add(packet)
+
+    def on_configure2(self, _event: wx.CommandEvent):
+        app: TerminalApp = wx.GetApp()
+        app.seq_num = (app.seq_num + 1) & 0xFF
+        packet = Packet(PacketType.CONFIGURE, 0x0200, app.seq_num, b"\x03HOLD\x00\x00\x00\x00\x00\x01CAR")
         app.outgoing.put(packet)
         self.add(packet)
 
@@ -185,15 +196,24 @@ class TerminalApp(wx.App):
         self.outgoing.put(packet)
         self.frame.add(packet)
 
+    def send_status(self, source: int, seq_num: int):
+        packet = Packet(PacketType.STATUS, source, seq_num, b"\x01\x0012:34")
+        self.outgoing.put(packet)
+
     def incoming(self, data: bytes):
         packet = Packet(data=data)
+        print("in", packet)
         self.frame.add(packet)
         if packet.packet_type != PacketType.ACK:
             self.seq_num = packet.seq_num
         if packet.packet_type == PacketType.ERROR:
             self.send_ack(packet.source, packet.seq_num)
             self.send_stop()
-        elif (packet.dest & BCAST_MASK) != BCAST_MASK:
+        elif packet.packet_type == PacketType.READ_STATUS:
+            self.send_status(packet.source, packet.seq_num)
+        elif ((packet.dest & BCAST_MASK) != BCAST_MASK) and (
+            (packet.packet_type.value & PacketType.ACK.value) != PacketType.ACK.value
+        ):
             self.send_ack(packet.source, packet.seq_num)
 
 
