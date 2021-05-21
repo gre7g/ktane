@@ -1,4 +1,4 @@
-from machine import Pin, lightsleep, Signal
+from machine import Pin, Signal
 
 from hardware import KtaneHardware, MT_MORSE
 from seven_seg import SevenSegment
