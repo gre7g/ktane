@@ -77,3 +77,15 @@ class UART:
 
     def sendbreak(self):
         pass
+
+
+def disable_irq() -> int:
+    pass
+
+
+def enable_irq(state: int):
+    pass
+
+
+def idle():
+    pass

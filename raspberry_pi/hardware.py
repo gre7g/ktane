@@ -234,7 +234,7 @@ class KtaneHardware:
                     self.current_packet = b""
 
         # Need to retry?
-        if self.next_retry and (ticks_us() >= self.next_retry):
+        if (self.next_retry is not None) and (ticks_us() >= self.next_retry):
             self.retry_now()
 
         if self.queued & QUEUE_STRIKE:
