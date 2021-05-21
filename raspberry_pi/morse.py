@@ -58,13 +58,13 @@ class MorseModule(KtaneHardware):
         ROTARY2.irq(self.on_rotary)
         self.display_freq()
 
-    def on_rx(self, pin):
+    def on_rx(self, _pin):
         if BUTTON_RX.value():
             self.seven_seg.display("r   ")
         else:
             self.display_freq()
 
-    def on_tx(self, pin):
+    def on_tx(self, _pin):
         if BUTTON_TX.value():
             self.seven_seg.display("  t ")
         else:
@@ -77,7 +77,7 @@ class MorseModule(KtaneHardware):
     def phase() -> int:
         return GRAY_DECODE[(2 if ROTARY1.value() else 0) | (1 if ROTARY2.value() else 0)]
 
-    def on_rotary(self, pin):
+    def on_rotary(self, _pin):
         phase = self.phase()
         direction = (phase - self.curr_phase) & 3
         self.curr_phase = phase

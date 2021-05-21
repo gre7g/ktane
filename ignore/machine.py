@@ -1,5 +1,5 @@
 class Pin:
-    IN = PULL_UP = None
+    IN = PULL_UP = OUT = None
 
     def __init__(self, *args, **kwargs):
         pass
@@ -18,6 +18,15 @@ class Signal:
     def value(self, new_value=None):
         pass
 
+    def off(self):
+        pass
+
+    def on(self):
+        pass
+
 
 class Timer:
-    pass
+    PERIODIC = ONE_SHOT = None
+
+    def init(self, freq=None, period=None, mode=None, callback=None):
+        pass

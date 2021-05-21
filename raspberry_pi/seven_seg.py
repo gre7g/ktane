@@ -73,7 +73,7 @@ class SevenSegment:
         self.decimal_pos = decimal_pos
         self.value = value
 
-    def update(self, timer=None):
+    def update(self, _timer=None):
         """Update the LEDs"""
         # Turn off previous digit
         DIGITS[self.digit].off()
