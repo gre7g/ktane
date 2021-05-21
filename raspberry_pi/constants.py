@@ -11,11 +11,11 @@ class CONSTANTS:
         GREEN = 5
 
     class LABELS:
-        ABORT=b"ABORT\x00\x00\x00"
-        CAR=b"CAR"
-        DETONATE=b"DETONATE"
-        FKR=b"FKR"
-        HOLD=b"HOLD\x00\x00\x00\x00"
+        ABORT = b"ABORT\x00\x00\x00"
+        CAR = b"CAR"
+        DETONATE = b"DETONATE"
+        FKR = b"FKR"
+        HOLD = b"HOLD\x00\x00\x00\x00"
 
     class MODES:
         SLEEP = 0
@@ -71,7 +71,7 @@ class CONSTANTS:
         NOTHING = 0x00
         STRIKE = 0x01
         DISARMED = 0x02
-        ASK_TIME=0x04
+        ASK_TIME = 0x04
 
     class SEVEN_SEGMENT:
         BLANK = 10

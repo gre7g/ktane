@@ -3,6 +3,7 @@ from machine import Pin, Timer, Signal
 from constants import CONSTANTS
 
 # Constants:
+DEFAULT_FREQ = 200
 SEGMENTS = [Signal(Pin(pin, Pin.OUT), invert=True) for pin in [13, 19, 11, 10, 20, 12, 14]]
 DIGITS = [Signal(Pin(pin, Pin.OUT), invert=True) for pin in [18, 16, 22, 17]]
 for digit in DIGITS:
@@ -17,7 +18,7 @@ L3.off()
 class SevenSegment:
     workspace = [10, 10, 10, 10]
 
-    def __init__(self, frequency=200):
+    def __init__(self, frequency=DEFAULT_FREQ):
         self.timer = None
         self.digit = 0
         self.value = self.workspace
@@ -25,7 +26,7 @@ class SevenSegment:
         self.colon = False
         self.start(frequency)
 
-    def start(self, frequency):
+    def start(self, frequency=DEFAULT_FREQ):
         if self.timer is None:
             # Enable timer
             self.timer = Timer(freq=frequency, mode=Timer.PERIODIC, callback=self.update)
