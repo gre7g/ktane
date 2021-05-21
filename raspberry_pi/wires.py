@@ -1,4 +1,4 @@
-from machine import Pin
+from machine import Pin, Signal
 import struct
 
 from hardware import (
@@ -10,6 +10,7 @@ from hardware import (
     FLAG_TRIGGER,
     PT_CONFIGURE,
     PT_START,
+    PT_STOP,
     LOG,
     MODE_SLEEP,
 )
@@ -35,10 +36,13 @@ class WireModule(KtaneHardware):
 
     def __init__(self) -> None:
         KtaneHardware.__init__(self, self.read_config())
-        self.handlers.update({PT_REQUEST_ID: self.request_id, PT_CONFIGURE: self.configure, PT_START: self.start})
+        self.handlers.update(
+            {PT_REQUEST_ID: self.request_id, PT_CONFIGURE: self.configure, PT_START: self.start, PT_STOP: self.stop}
+        )
         self.serial_number = b""
-        self.posts = [Pin(pin_num, Pin.IN, Pin.PULL_UP) for pin_num in POSTS]
-        self.wires = [Pin(pin_num, Pin.OUT) for pin_num in WIRES]
+        self.post_pins = [Pin(pin_num, Pin.IN, Pin.PULL_UP) for pin_num in POSTS]
+        self.posts = [Signal(pin, invert=True) for pin in self.post_pins]
+        self.wires = [Signal(Pin(pin_num, Pin.OUT), invert=True) for pin_num in WIRES]
 
     @staticmethod
     def read_config() -> int:
@@ -58,19 +62,19 @@ class WireModule(KtaneHardware):
         return (MT_WIRES << 8) | (ord(unique) if unique else 0x00)
 
     def request_id(self, source: int, _dest: int, _payload: bytes) -> bool:
-        LOG("request_id")
+        LOG.debug("request_id")
         self.send_without_queuing(source, PT_RESPONSE_ID, struct.pack("BB", FLAG_TRIGGER, 0))
         return True
 
     def configure(self, _source: int, _dest: int, payload: bytes) -> bool:
         # Payload is the serial number
         self.serial_number = payload
-        LOG("configure", payload)
+        LOG.debug("configure", payload)
         return False
 
     def start(self, _source: int, _dest: int, _payload: bytes) -> bool:
         # Payload is the difficulty but we're not adjustable so we ignore it
-        LOG("start")
+        LOG.debug("start")
         if self.serial_number and self.determine_correct_wire():
             self.set_mode(MODE_ARMED)
         else:
@@ -78,14 +82,24 @@ class WireModule(KtaneHardware):
             self.set_mode(MODE_SLEEP)
         return False
 
+    def stop(self, source: int, dest: int, payload: bytes) -> bool:
+        # Disable handlers
+        for post in self.post_pins:
+            post.irq(None)
+
+        return KtaneHardware.stop(self, source, dest, payload)
+
     def determine_correct_wire(self) -> bool:
         # Map wires-posts
         self.mapping = [None] * len(POSTS)
         for index1 in range(len(WIRES)):
+            # Drive one wire
             for index2, wire in enumerate(self.wires):
-                wire.value(index1 != index2)
+                wire.value(index1 == index2)
+
+            # Find a driven post
             for index2, post in enumerate(self.posts):
-                if not post.value():
+                if post.value():
                     self.mapping[index2] = index1
                     break
 
@@ -93,9 +107,9 @@ class WireModule(KtaneHardware):
         self.colors = [COLOR_POSITIONS[mapping] for mapping in self.mapping if mapping is not None]
         num_wires = len(self.colors)
 
-        # Drive the wires low
+        # Drive the wires
         for wire in self.wires:
-            wire.value(False)
+            wire.on()
 
         # Game logic
         last_serial_digit_odd = self.serial_number[-1] in b"13579"
@@ -148,6 +162,8 @@ class WireModule(KtaneHardware):
         return True
 
     def should_cut(self, post_number: int, color=None) -> None:
+        LOG.debug("should_cut", post_number, color)
+
         # Did they specify a color (e.g. "last red" or "first white")?
         if color is None:
             # No all colors, so just skip None
@@ -162,24 +178,21 @@ class WireModule(KtaneHardware):
             # Post number (Warning: post #1 means index 0!)
             self.right_post = posts_in_use[post_number - 1]
 
-        LOG("right_post=", self.right_post)
+        LOG.info("right_post=", self.right_post)
+
+        for post in self.post_pins:
+            post.irq(self.wrong_post, trigger=Pin.IRQ_RISING)
+        self.post_pins[self.right_post].irq(self.right_post, trigger=Pin.IRQ_RISING)
 
     def count_num_of(self, color_to_count: int) -> int:
         return sum(1 for color in self.colors if color == color_to_count)
 
-    def poll(self) -> None:
-        KtaneHardware.poll(self)
+    def wrong_post(self, pin):
+        LOG.info("wrong pin")
+        self.strike()
+        pin.irq(None)
 
-        # When the module is running, check if a wire has been cut
-        if self.mode == MODE_ARMED:
-            for index, mapping in enumerate(self.mapping):
-                if (mapping is not None) and self.posts[index].value():
-                    # Wire cut! Was it the right one?
-                    LOG("cut=", index)
-                    if index == self.right_post:
-                        self.disarmed()
-                    else:
-                        self.strike()
-
-                        # Remove the wire from the mapping so we don't poll it again
-                        self.mapping[index] = None
+    def right_post(self, pin):
+        LOG.info("right pin")
+        self.disarmed()
+        pin.irq(None)

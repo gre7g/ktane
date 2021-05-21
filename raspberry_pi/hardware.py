@@ -8,8 +8,10 @@ from time import time
 class LOG:
     # debug = print
     debug = lambda *args: None
-    # info = print
-    info = lambda *args: None
+    info = print
+    # info = lambda *args: None
+    warning = print
+    # warning = lambda *args: None
 
 
 # Constants:
@@ -105,16 +107,16 @@ class KtaneHardware:
     def set_mode(self, mode: int) -> None:
         self.mode = mode
         if mode == MODE_SLEEP:
-            LOG("mode=sleep")
+            LOG.info("mode=sleep")
             self.status_green.init(Pin.IN)
             self.status_red.init(Pin.IN)
         elif mode in [MODE_ARMED, MODE_READY]:
-            LOG("mode=armed or ready")
+            LOG.info("mode=armed or ready")
             self.status_green.init(Pin.IN)
             self.status_red.init(Pin.OUT)
             self.status_red.off()  # active low
         elif mode == MODE_DISARMED:
-            LOG("mode=disarmed")
+            LOG.info("mode=disarmed")
             self.status_green.init(Pin.OUT)
             self.status_red.init(Pin.IN)
             self.status_green.off()  # active low
@@ -180,7 +182,7 @@ class KtaneHardware:
                         # Is anything queued now?
                         if not self.uart.any():
                             # Still nothing, abort the packet
-                            LOG("packet aborted %r" % packet)
+                            LOG.warning("packet aborted %r" % packet)
                             break
                 else:
                     # Is the checksum okay?
@@ -241,19 +243,19 @@ class KtaneHardware:
         self.tx_en.off()
 
     def unable_to_arm(self) -> None:
-        LOG("error")
+        LOG.info("error")
         self.queue_packet(QueuedPacket(TIMER_ADDR, PT_ERROR))
 
     def disarmed(self):
-        LOG("disarmed")
+        LOG.info("disarmed")
         self.queue_packet(QueuedPacket(TIMER_ADDR, PT_DEFUSED))
         self.set_mode(MODE_DISARMED)
 
     def strike(self):
-        LOG("strike")
+        LOG.info("strike")
         self.queue_packet(QueuedPacket(TIMER_ADDR, PT_STRIKE))
 
     def stop(self, _source: int, _dest: int, _payload: bytes) -> bool:
-        LOG("stop")
+        LOG.info("stop")
         self.set_mode(MODE_SLEEP)
         return False
