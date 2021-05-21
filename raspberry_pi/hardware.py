@@ -1,4 +1,4 @@
-from machine import Pin, UART, lightsleep
+from machine import Pin, UART, Signal, Timer
 from math import ceil
 from random import randrange
 import struct
@@ -93,11 +93,12 @@ class KtaneHardware:
     reply_storage: bytes
 
     def __init__(self, addr: int) -> None:
+        self.current_packet = None
         self.addr = addr
-        self.uart = UART(UART_NUM, BAUD_RATE, tx=Pin(TX_PIN), rx=Pin(RX_PIN))
+        self.uart = UART(UART_NUM, BAUD_RATE, tx=Pin(TX_PIN), rx=Pin(RX_PIN), timeout=1, timeout_char=1)
         self.tx_en = Pin(TX_EN_PIN, Pin.OUT)
-        self.status_red = Pin(STATUS_RED, Pin.IN)
-        self.status_green = Pin(STATUS_GREEN, Pin.IN)
+        self.status_red = Signal(Pin(STATUS_RED, Pin.IN), invert=True)
+        self.status_green = Signal(Pin(STATUS_GREEN, Pin.IN), invert=True)
         self.handlers = {PT_STOP: self.stop}
         self.last_seq_seen = 0
         self.next_retry = None
@@ -108,18 +109,16 @@ class KtaneHardware:
         self.mode = mode
         if mode == MODE_SLEEP:
             LOG.info("mode=sleep")
-            self.status_green.init(Pin.IN)
-            self.status_red.init(Pin.IN)
+            self.status_green.off()
+            self.status_red.off()
         elif mode in [MODE_ARMED, MODE_READY]:
             LOG.info("mode=armed or ready")
-            self.status_green.init(Pin.IN)
-            self.status_red.init(Pin.OUT)
-            self.status_red.off()  # active low
+            self.status_green.off()
+            self.status_red.on()
         elif mode == MODE_DISARMED:
             LOG.info("mode=disarmed")
-            self.status_green.init(Pin.OUT)
-            self.status_red.init(Pin.IN)
-            self.status_green.off()  # active low
+            self.status_green.on()
+            self.status_red.off()
 
     def queue_packet(self, packet: QueuedPacket) -> None:
         self.queued_packet = packet
@@ -165,9 +164,13 @@ class KtaneHardware:
         # Any UART data waiting?
         if self.uart.any():
             # Yes, read length
-            packet: bytes = self.uart.read(1)
-            if packet != b"\x00":
-                length = 1 + packet[0] + 2  # Length, packet, checksum
+            self.current_packet = self.uart.read(1)
+            if self.current_packet != b"\x00":
+                length = 1 + self.current_packet[0] + 2  # Length, packet, checksum
+                if self.uart.any() >= length:
+                    self.read_remainder()
+                else:
+                    Timer()
 
                 # Read remainder
                 while len(packet) < length:

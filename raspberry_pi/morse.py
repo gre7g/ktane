@@ -1,7 +1,7 @@
 from machine import Pin, Signal
 
 from hardware import KtaneHardware, MT_MORSE
-from seven_seg import SevenSegment
+from seven_seg import SevenSegment, BLANK, LETTER_R, LETTER_T
 
 # Constants:
 CONFIG_FILENAME = "config.txt"
@@ -44,6 +44,9 @@ BUTTON_RX = Signal(BUTTON_RX_PIN, invert=True)
 BUTTON_TX_PIN = Pin(5, Pin.IN, Pin.PULL_UP)
 BUTTON_TX = Signal(BUTTON_TX_PIN, invert=True)
 
+ARRAY_R = [LETTER_R, BLANK, BLANK, BLANK]
+ARRAY_T = [BLANK, BLANK, LETTER_T, BLANK]
+
 
 class MorseModule(KtaneHardware):
     def __init__(self) -> None:
@@ -58,25 +61,30 @@ class MorseModule(KtaneHardware):
         ROTARY2.irq(self.on_rotary)
         self.display_freq()
 
+    # Called during an interrupt! Don't allocate memory or waste time!
     def on_rx(self, _pin):
         if BUTTON_RX.value():
-            self.seven_seg.display("r   ")
+            self.seven_seg.display(ARRAY_R)
         else:
             self.display_freq()
 
+    # Called during an interrupt! Don't allocate memory or waste time!
     def on_tx(self, _pin):
         if BUTTON_TX.value():
-            self.seven_seg.display("  t ")
+            self.seven_seg.display(ARRAY_T)
         else:
             self.display_freq()
 
+    # Called during an interrupt! Don't allocate memory or waste time!
     def display_freq(self):
         self.seven_seg.display(FREQUENCIES[self.value], 3)
 
+    # Called during an interrupt! Don't allocate memory or waste time!
     @staticmethod
     def phase() -> int:
         return GRAY_DECODE[(2 if ROTARY1.value() else 0) | (1 if ROTARY2.value() else 0)]
 
+    # Called during an interrupt! Don't allocate memory or waste time!
     def on_rotary(self, _pin):
         phase = self.phase()
         direction = (phase - self.curr_phase) & 3
