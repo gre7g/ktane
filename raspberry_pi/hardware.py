@@ -47,7 +47,7 @@ PT_CONFIGURE = 0x03
 PT_START = 0x04
 PT_STRIKE = 0x05
 PT_ERROR = 0x06
-PT_DEFUSED = 0x07
+PT_DISARMED = 0x07
 PT_NEEDY = 0x08
 PT_READ_STATUS = 0x09
 PT_STATUS = 0x89
@@ -248,7 +248,7 @@ class KtaneHardware:
 
     def disarmed(self):
         LOG.info("disarmed")
-        self.queue_packet(QueuedPacket(TIMER_ADDR, PT_DEFUSED))
+        self.queue_packet(QueuedPacket(TIMER_ADDR, PT_DISARMED))
         self.set_mode(MODE_DISARMED)
 
     def strike(self):

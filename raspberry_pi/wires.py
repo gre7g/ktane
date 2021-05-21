@@ -11,6 +11,7 @@ from hardware import (
     PT_CONFIGURE,
     PT_START,
     PT_STOP,
+    PT_DISARMED,
     LOG,
     MODE_SLEEP,
 )
@@ -37,7 +38,13 @@ class WireModule(KtaneHardware):
     def __init__(self) -> None:
         KtaneHardware.__init__(self, self.read_config())
         self.handlers.update(
-            {PT_REQUEST_ID: self.request_id, PT_CONFIGURE: self.configure, PT_START: self.start, PT_STOP: self.stop}
+            {
+                PT_REQUEST_ID: self.request_id,
+                PT_CONFIGURE: self.configure,
+                PT_START: self.start,
+                PT_STOP: self.stop,
+                PT_DISARMED: self.disarmed,
+            }
         )
         self.serial_number = b""
         self.post_pins = [Pin(pin_num, Pin.IN, Pin.PULL_UP) for pin_num in POSTS]
@@ -82,11 +89,17 @@ class WireModule(KtaneHardware):
             self.set_mode(MODE_SLEEP)
         return False
 
-    def stop(self, source: int, dest: int, payload: bytes) -> bool:
+    def disable_irqs(self):
         # Disable handlers
         for post in self.post_pins:
             post.irq(None)
 
+    def disarmed(self):
+        self.disable_irqs()
+        KtaneHardware.disarmed(self)
+
+    def stop(self, source: int, dest: int, payload: bytes) -> bool:
+        self.disable_irqs()
         return KtaneHardware.stop(self, source, dest, payload)
 
     def determine_correct_wire(self) -> bool:
@@ -102,9 +115,13 @@ class WireModule(KtaneHardware):
                 if post.value():
                     self.mapping[index2] = index1
                     break
+        for index2, index1 in enumerate(self.mapping):
+            LOG.debug("mapping", index2, index1)
 
         # Reduce to a list of colors
         self.colors = [COLOR_POSITIONS[mapping] for mapping in self.mapping if mapping is not None]
+        for index, color in enumerate(self.colors):
+            LOG.debug("colors", index, color)
         num_wires = len(self.colors)
 
         # Drive the wires
@@ -181,18 +198,31 @@ class WireModule(KtaneHardware):
         LOG.info("right_post=", self.right_post)
 
         for post in self.post_pins:
-            post.irq(self.wrong_post, trigger=Pin.IRQ_RISING)
-        self.post_pins[self.right_post].irq(self.right_post, trigger=Pin.IRQ_RISING)
+            post.irq(self.on_wrong_post, trigger=Pin.IRQ_RISING)
+        self.post_pins[self.right_post].irq(self.on_right_post, trigger=Pin.IRQ_RISING)
 
     def count_num_of(self, color_to_count: int) -> int:
         return sum(1 for color in self.colors if color == color_to_count)
 
-    def wrong_post(self, pin):
-        LOG.info("wrong pin")
-        self.strike()
-        pin.irq(None)
+    def pin_fired(self, pin) -> bool:
+        for index, post in enumerate(self.post_pins):
+            if pin == post:
+                if self.mapping[index] is None:
+                    return False
+                else:
+                    self.mapping[index] = None
+                    return True
+        else:
+            return False
 
-    def right_post(self, pin):
-        LOG.info("right pin")
-        self.disarmed()
-        pin.irq(None)
+    def on_wrong_post(self, pin):
+        if self.pin_fired(pin):
+            LOG.info("wrong pin")
+            pin.irq(None)
+            self.strike()
+
+    def on_right_post(self, pin):
+        if self.pin_fired(pin):
+            LOG.info("right pin")
+            pin.irq(None)
+            self.disarmed()
