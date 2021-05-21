@@ -14,6 +14,8 @@ from hardware import (
     PT_DISARMED,
     LOG,
     MODE_SLEEP,
+    QUEUE_STRIKE,
+    QUEUE_DISARMED,
 )
 
 # Constants:
@@ -28,10 +30,6 @@ WHITE = 3
 YELLOW = 4
 
 COLOR_POSITIONS = [BLACK, BLACK, BLUE, BLUE, RED, RED, WHITE, WHITE, YELLOW, YELLOW]
-
-QUEUE_NOTHING = 0
-QUEUE_STRIKE = 1
-QUEUE_DISARMED = 2
 
 
 class WireModule(KtaneHardware):
@@ -50,7 +48,6 @@ class WireModule(KtaneHardware):
                 PT_DISARMED: self.disarmed,
             }
         )
-        self.queued = QUEUE_NOTHING
         self.serial_number = b""
         self.post_pins = [Pin(pin_num, Pin.IN, Pin.PULL_UP) for pin_num in POSTS]
         self.posts = [Signal(pin, invert=True) for pin in self.post_pins]
@@ -93,13 +90,6 @@ class WireModule(KtaneHardware):
             self.unable_to_arm()
             self.set_mode(MODE_SLEEP)
         return False
-
-    def poll(self) -> None:
-        if self.queued == QUEUE_STRIKE:
-            self.strike()
-        elif self.queued == QUEUE_DISARMED:
-            self.disarmed()
-        KtaneHardware.poll(self)
 
     def disable_irqs(self):
         # Disable handlers
@@ -233,11 +223,11 @@ class WireModule(KtaneHardware):
         if self.pin_fired(pin):
             LOG.info("wrong pin")
             pin.irq(None)
-            self.queued = QUEUE_STRIKE
+            self.queued |= QUEUE_STRIKE
 
     # Called during an interrupt! Don't allocate memory or waste time!
     def on_right_post(self, pin):
         if self.pin_fired(pin):
             LOG.info("right pin")
             pin.irq(None)
-            self.queued = QUEUE_DISARMED
+            self.queued |= QUEUE_DISARMED

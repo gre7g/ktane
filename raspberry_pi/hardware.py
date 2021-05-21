@@ -1,13 +1,13 @@
-from machine import Pin, UART, Signal, Timer
+from machine import Pin, UART, Signal, disable_irq, enable_irq, idle
 from math import ceil
 from random import randrange
 import struct
-from time import time
+from utime import ticks_us
 
 
 class LOG:
-    # debug = print
-    debug = lambda *args: None
+    debug = print
+    # debug = lambda *args: None
     info = print
     # info = lambda *args: None
     warning = print
@@ -20,12 +20,12 @@ BAUD_RATE = 115200
 TX_PIN = 8
 RX_PIN = 9
 TX_EN_PIN = 15
-ONE_FRAME = 10 / BAUD_RATE * 1000.0
-TWO_FRAMES = int(ceil(10 / BAUD_RATE * 1000.0))
+ONE_FRAMES_US = int(ceil(10 / BAUD_RATE * 1000000.0))
+TWO_FRAMES_US = int(ceil(20 / BAUD_RATE * 1000000.0))
 BACKOFF_TIME = (1, 5)
 BCAST_REPLY_BACKOFF = (1, 50)
-INITIAL_RETRY_TIME = 2  # 2s
-RETRY_TIME = 1  # 1s
+INITIAL_RETRY_US = 2000000  # 2s
+RETRY_US = 1000000  # 1s
 TIMER_ADDR = 0x0000
 BROADCAST_ALL = 0xFFFF
 BROADCAST_MASK = 0x00FF
@@ -37,6 +37,8 @@ MODE_SLEEP = 0
 MODE_READY = 1
 MODE_ARMED = 2
 MODE_DISARMED = 3
+
+MIN_PACKET_LEN = 9
 
 PT_RESPONSE_MASK = 0x80
 PT_ACK = 0x80
@@ -82,6 +84,10 @@ SOUND_START_CAP_4 = 14
 SOUND_MORSE_A = 15
 SOUND_MORSE_Z = 40
 
+QUEUE_NOTHING = 0x00
+QUEUE_STRIKE = 0x01
+QUEUE_DISARMED = 0x02
+
 
 class QueuedPacket:
     def __init__(self, dest: int, packet_type: int, payload: bytes = b"") -> None:
@@ -93,13 +99,15 @@ class KtaneHardware:
     reply_storage: bytes
 
     def __init__(self, addr: int) -> None:
-        self.current_packet = None
+        self.current_packet = b""
+        self.rx_timeout = None
         self.addr = addr
-        self.uart = UART(UART_NUM, BAUD_RATE, tx=Pin(TX_PIN), rx=Pin(RX_PIN), timeout=1, timeout_char=1)
+        self.uart = UART(UART_NUM, BAUD_RATE, tx=Pin(TX_PIN), rx=Pin(RX_PIN))
         self.tx_en = Pin(TX_EN_PIN, Pin.OUT)
-        self.status_red = Signal(Pin(STATUS_RED, Pin.IN), invert=True)
-        self.status_green = Signal(Pin(STATUS_GREEN, Pin.IN), invert=True)
+        self.status_red = Signal(Pin(STATUS_RED, Pin.OUT), invert=True)
+        self.status_green = Signal(Pin(STATUS_GREEN, Pin.OUT), invert=True)
         self.handlers = {PT_STOP: self.stop}
+        self.queued = QUEUE_NOTHING
         self.last_seq_seen = 0
         self.next_retry = None
         self.awaiting_ack_of_seq = self.queued_packet = None
@@ -122,7 +130,7 @@ class KtaneHardware:
 
     def queue_packet(self, packet: QueuedPacket) -> None:
         self.queued_packet = packet
-        self.retry_now(INITIAL_RETRY_TIME)
+        self.retry_now(INITIAL_RETRY_US)
 
     def send_ack(self, dest: int, seq_num: int) -> None:
         self.send(dest, PT_ACK, seq_num)
@@ -132,11 +140,11 @@ class KtaneHardware:
         self.last_seq_seen = seq_num
         self.send(dest, packet_type, seq_num, payload)
 
-    def retry_now(self, retry_time: int = RETRY_TIME) -> None:
+    def retry_now(self, retry_time: int = RETRY_US) -> None:
         seq_num = (self.last_seq_seen + 1) & 0xFF
         self.last_seq_seen = self.awaiting_ack_of_seq = seq_num
         self.send(self.queued_packet.dest, self.queued_packet.packet_type, seq_num, self.queued_packet.payload)
-        self.next_retry = time() + retry_time
+        self.next_retry = ticks_us() + retry_time
 
     def send_block_return_response(self, packet: QueuedPacket):
         self.queued_packet = packet
@@ -161,40 +169,45 @@ class KtaneHardware:
     #                       will be 0xFFFF
     def poll(self) -> None:
         """Poll UART"""
+        was_idle = True
+
         # Any UART data waiting?
-        if self.uart.any():
-            # Yes, read length
-            self.current_packet = self.uart.read(1)
-            if self.current_packet != b"\x00":
-                length = 1 + self.current_packet[0] + 2  # Length, packet, checksum
-                if self.uart.any() >= length:
-                    self.read_remainder()
-                else:
-                    Timer()
+        available = self.uart.any()
+        buffered = len(self.current_packet)
+        if available:
+            was_idle = False
+            if buffered == 0:
+                self.current_packet = self.uart.read(1)
+                buffered = 1
+                available -= 1
+        elif self.rx_timeout and (ticks_us() > self.rx_timeout):
+            # Aborted or scrambled packet
+            LOG.warning("packet aborted")
+            self.current_packet = b""
+            self.rx_timeout = None
 
-                # Read remainder
-                while len(packet) < length:
-                    # Anything queued?
-                    if self.uart.any():
-                        # Read it in
-                        packet += self.uart.read(1)
-                    else:
-                        # Nothing is queued. Wait two frame times.
-                        lightsleep(TWO_FRAMES)
-
-                        # Is anything queued now?
-                        if not self.uart.any():
-                            # Still nothing, abort the packet
-                            LOG.warning("packet aborted %r" % packet)
-                            break
+        if available:
+            length = 1 + self.current_packet[0] + 2  # Length, packet, checksum
+            if length < MIN_PACKET_LEN:
+                # Too short to be a real packet. Discard it.
+                self.current_packet = b""
+            else:
+                if (buffered + available) < length:
+                    # Some more. Read it and re-queue.
+                    self.current_packet += self.uart.read(available)
+                    self.rx_timeout = ticks_us() + TWO_FRAMES_US
                 else:
+                    # The rest is ready
+                    self.current_packet += self.uart.read(length - buffered)
+                    self.rx_timeout = None
+
                     # Is the checksum okay?
-                    (checksum,) = struct.unpack("<H", packet[-2:])
-                    checksum += sum(packet[:-2])
+                    (checksum,) = struct.unpack("<H", self.current_packet[-2:])
+                    checksum += sum(self.current_packet[:-2])
                     if checksum == 0xFFFF:
                         # Checksum is okay. Save the sequence number.
-                        source, dest, packet_type, seq_num = struct.unpack("<HHBB", packet[1:7])
-                        payload = packet[7:-2]
+                        source, dest, packet_type, seq_num = struct.unpack("<HHBB", self.current_packet[1:7])
+                        payload = self.current_packet[7:-2]
                         if (packet_type & PT_RESPONSE_MASK) == 0:
                             self.last_seq_seen = seq_num
 
@@ -218,9 +231,27 @@ class KtaneHardware:
                                 if not handler(source, dest, payload) and ((dest & BROADCAST_MASK) != BROADCAST_MASK):
                                     self.send_ack(source, seq_num)
 
+                    self.current_packet = b""
+
         # Need to retry?
-        if (self.next_retry is not None) and (time() >= self.next_retry):
+        if self.next_retry and (ticks_us() >= self.next_retry):
             self.retry_now()
+
+        if self.queued & QUEUE_STRIKE:
+            was_idle = False
+            self.strike()
+            state = disable_irq()
+            self.queued &= ~QUEUE_STRIKE
+            enable_irq(state)
+        if self.queued & QUEUE_DISARMED:
+            was_idle = False
+            self.disarmed()
+            state = disable_irq()
+            self.queued &= ~QUEUE_DISARMED
+            enable_irq(state)
+
+        if was_idle:
+            idle()
 
     def poll_forever(self):
         while True:
@@ -231,18 +262,21 @@ class KtaneHardware:
         # Is anything inbound?
         while self.uart.any():
             # Yes, give it a chance to arrive instead of clobbering it
-            self.poll()
 
-            # Random backoff
-            lightsleep(randrange(*BCAST_REPLY_BACKOFF) if packet_type == PT_RESPONSE_ID else randrange(*BACKOFF_TIME))
+            back_off = ticks_us() + (
+                randrange(*BCAST_REPLY_BACKOFF) if packet_type == PT_RESPONSE_ID else randrange(*BACKOFF_TIME)
+            )
+            while ticks_us() < back_off:
+                self.poll()
 
         # Send packet
         data = struct.pack("<BHHBB", 2 + 2 + 1 + 1 + len(payload), self.addr, dest, packet_type, seq_num) + payload
         data += struct.pack("<H", 0xFFFF - sum(data))
-        delay = len(data) * ONE_FRAME
+        done = ticks_us() + (len(data) * ONE_FRAMES_US)
         self.tx_en.on()
         self.uart.write(data)
-        lightsleep(int(ceil(delay)))
+        while ticks_us() < done:
+            idle()
         self.tx_en.off()
 
     def unable_to_arm(self) -> None:
