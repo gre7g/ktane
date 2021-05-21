@@ -1,35 +1,26 @@
 from machine import Pin, Signal
 import struct
 
-from hardware import (
-    KtaneHardware,
-    MODE_ARMED,
-    PT_REQUEST_ID,
-    MT_WIRES,
-    PT_RESPONSE_ID,
-    FLAG_TRIGGER,
-    PT_CONFIGURE,
-    PT_START,
-    PT_STOP,
-    PT_DISARMED,
-    LOG,
-    MODE_SLEEP,
-    QUEUE_STRIKE,
-    QUEUE_DISARMED,
-)
+from constants import CONSTANTS
+from log import LOG
+from hardware import KtaneHardware
 
 # Constants:
-CONFIG_FILENAME = "config.txt"
 POSTS = (2, 3, 4, 5, 6, 7)
 WIRES = (10, 11, 12, 13, 14, 20, 19, 18, 17, 16)
 
-BLACK = 0
-BLUE = 1
-RED = 2
-WHITE = 3
-YELLOW = 4
-
-COLOR_POSITIONS = [BLACK, BLACK, BLUE, BLUE, RED, RED, WHITE, WHITE, YELLOW, YELLOW]
+COLOR_POSITIONS = [
+    CONSTANTS.COLORS.BLACK,
+    CONSTANTS.COLORS.BLACK,
+    CONSTANTS.COLORS.BLUE,
+    CONSTANTS.COLORS.BLUE,
+    CONSTANTS.COLORS.RED,
+    CONSTANTS.COLORS.RED,
+    CONSTANTS.COLORS.WHITE,
+    CONSTANTS.COLORS.WHITE,
+    CONSTANTS.COLORS.YELLOW,
+    CONSTANTS.COLORS.YELLOW,
+]
 
 
 class WireModule(KtaneHardware):
@@ -41,11 +32,11 @@ class WireModule(KtaneHardware):
         KtaneHardware.__init__(self, self.read_config())
         self.handlers.update(
             {
-                PT_REQUEST_ID: self.request_id,
-                PT_CONFIGURE: self.configure,
-                PT_START: self.start,
-                PT_STOP: self.stop,
-                PT_DISARMED: self.disarmed,
+                CONSTANTS.PROTOCOL.PACKET_TYPE.REQUEST_ID: self.request_id,
+                CONSTANTS.PROTOCOL.PACKET_TYPE.CONFIGURE: self.configure,
+                CONSTANTS.PROTOCOL.PACKET_TYPE.START: self.start,
+                CONSTANTS.PROTOCOL.PACKET_TYPE.STOP: self.stop,
+                CONSTANTS.PROTOCOL.PACKET_TYPE.DISARMED: self.disarmed,
             }
         )
         self.serial_number = b""
@@ -62,17 +53,19 @@ class WireModule(KtaneHardware):
         # unique   1        Unique portion of ID, assigned at manufacture
         unique = b""
         try:
-            file_obj = open(CONFIG_FILENAME, "rb")
+            file_obj = open(CONSTANTS.MODULES.CONFIG_FILENAME, "rb")
             unique = file_obj.read(1)
             file_obj.close()
         except OSError:
             pass
 
-        return (MT_WIRES << 8) | (ord(unique) if unique else 0x00)
+        return (CONSTANTS.MODULES.TYPES.WIRES << 8) | (ord(unique) if unique else 0x00)
 
     def request_id(self, source: int, _dest: int, _payload: bytes) -> bool:
         LOG.debug("request_id")
-        self.send_without_queuing(source, PT_RESPONSE_ID, struct.pack("BB", FLAG_TRIGGER, 0))
+        self.send_without_queuing(
+            source, CONSTANTS.PROTOCOL.PACKET_TYPE.RESPONSE_ID, struct.pack("BB", CONSTANTS.MODULES.FLAGS.TRIGGER, 0)
+        )
         return True
 
     def configure(self, _source: int, _dest: int, payload: bytes) -> bool:
@@ -85,10 +78,10 @@ class WireModule(KtaneHardware):
         # Payload is the difficulty but we're not adjustable so we ignore it
         LOG.debug("start")
         if self.serial_number and self.determine_correct_wire():
-            self.set_mode(MODE_ARMED)
+            self.set_mode(CONSTANTS.MODES.ARMED)
         else:
             self.unable_to_arm()
-            self.set_mode(MODE_SLEEP)
+            self.set_mode(CONSTANTS.MODES.SLEEP)
         return False
 
     def disable_irqs(self):
@@ -135,46 +128,46 @@ class WireModule(KtaneHardware):
         if num_wires < 3:
             return False
         elif num_wires == 3:
-            if RED not in self.colors:  # No red
+            if CONSTANTS.COLORS.RED not in self.colors:  # No red
                 self.should_cut(2)  # Cut second
-            elif self.colors[-1] == WHITE:  # Last is white
+            elif self.colors[-1] == CONSTANTS.COLORS.WHITE:  # Last is white
                 self.should_cut(-1)  # Cut last
-            elif self.count_num_of(BLUE) > 1:  # More than one blue
-                self.should_cut(-1, BLUE)  # Cut last blue
+            elif self.count_num_of(CONSTANTS.COLORS.BLUE) > 1:  # More than one blue
+                self.should_cut(-1, CONSTANTS.COLORS.BLUE)  # Cut last blue
             else:
                 self.should_cut(-1)  # Cut last
         elif num_wires == 4:
             # More than one red and last digit of serial number is odd
-            if (self.count_num_of(RED) > 1) and last_serial_digit_odd:
-                self.should_cut(-1, RED)  # Cut last red
+            if (self.count_num_of(CONSTANTS.COLORS.RED) > 1) and last_serial_digit_odd:
+                self.should_cut(-1, CONSTANTS.COLORS.RED)  # Cut last red
             # Last is yellow and no reds
-            elif (self.colors[-1] == YELLOW) and (self.count_num_of(RED) == 0):
+            elif (self.colors[-1] == CONSTANTS.COLORS.YELLOW) and (self.count_num_of(CONSTANTS.COLORS.RED) == 0):
                 self.should_cut(1)  # Cut first
-            elif self.count_num_of(BLUE) == 1:  # Exactly one blue
+            elif self.count_num_of(CONSTANTS.COLORS.BLUE) == 1:  # Exactly one blue
                 self.should_cut(1)  # Cut first
-            elif self.count_num_of(YELLOW) > 1:  # More than one yellow
+            elif self.count_num_of(CONSTANTS.COLORS.YELLOW) > 1:  # More than one yellow
                 self.should_cut(-1)  # Cut last
             else:
                 self.should_cut(2)  # Cut second
         elif num_wires == 5:
             # Last is black and last digit of serial number is odd
-            if (self.colors[-1] == BLACK) and last_serial_digit_odd:
+            if (self.colors[-1] == CONSTANTS.COLORS.BLACK) and last_serial_digit_odd:
                 self.should_cut(4)  # Cut fourth
             # Exactly one red and more than one yellow
-            elif (self.count_num_of(RED) == 1) and (self.count_num_of(YELLOW) > 1):
+            elif (self.count_num_of(CONSTANTS.COLORS.RED) == 1) and (self.count_num_of(CONSTANTS.COLORS.YELLOW) > 1):
                 self.should_cut(1)  # Cut first
-            elif self.count_num_of(BLACK) == 0:  # No black
+            elif self.count_num_of(CONSTANTS.COLORS.BLACK) == 0:  # No black
                 self.should_cut(2)  # Cut second
             else:
                 self.should_cut(1)  # Cut first
         else:  # if num_wires==6:
             # No yellow and last digit of serial number is odd
-            if (self.count_num_of(YELLOW) == 0) and last_serial_digit_odd:
+            if (self.count_num_of(CONSTANTS.COLORS.YELLOW) == 0) and last_serial_digit_odd:
                 self.should_cut(3)  # Cut third
             # Exactly one yellow and more than one white
-            elif (self.count_num_of(YELLOW) == 1) and (self.count_num_of(WHITE) > 1):
+            elif (self.count_num_of(CONSTANTS.COLORS.YELLOW) == 1) and (self.count_num_of(CONSTANTS.COLORS.WHITE) > 1):
                 self.should_cut(4)  # Cut fourth
-            elif self.count_num_of(RED) == 0:  # No red
+            elif self.count_num_of(CONSTANTS.COLORS.RED) == 0:  # No red
                 self.should_cut(-1)  # Cut last
             else:
                 self.should_cut(4)  # Cut fourth
@@ -223,11 +216,11 @@ class WireModule(KtaneHardware):
         if self.pin_fired(pin):
             LOG.info("wrong pin")
             pin.irq(None)
-            self.queued |= QUEUE_STRIKE
+            self.queued |= CONSTANTS.QUEUED_TASKS.STRIKE
 
     # Called during an interrupt! Don't allocate memory or waste time!
     def on_right_post(self, pin):
         if self.pin_fired(pin):
             LOG.info("right pin")
             pin.irq(None)
-            self.queued |= QUEUE_DISARMED
+            self.queued |= CONSTANTS.QUEUED_TASKS.DISARMED

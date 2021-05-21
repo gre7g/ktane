@@ -1,10 +1,10 @@
 from machine import Pin, Signal
 
-from hardware import KtaneHardware, MT_MORSE
-from seven_seg import SevenSegment, BLANK, LETTER_R, LETTER_T
+from constants import CONSTANTS
+from hardware import KtaneHardware
+from seven_seg import SevenSegment
 
 # Constants:
-CONFIG_FILENAME = "config.txt"
 GRAY_DECODE = [2, 1, 3, 0]
 
 FREQUENCIES = [
@@ -44,8 +44,18 @@ BUTTON_RX = Signal(BUTTON_RX_PIN, invert=True)
 BUTTON_TX_PIN = Pin(5, Pin.IN, Pin.PULL_UP)
 BUTTON_TX = Signal(BUTTON_TX_PIN, invert=True)
 
-ARRAY_R = [LETTER_R, BLANK, BLANK, BLANK]
-ARRAY_T = [BLANK, BLANK, LETTER_T, BLANK]
+ARRAY_R = [
+    CONSTANTS.SEVEN_SEGMENT.LETTER_R,
+    CONSTANTS.SEVEN_SEGMENT.BLANK,
+    CONSTANTS.SEVEN_SEGMENT.BLANK,
+    CONSTANTS.SEVEN_SEGMENT.BLANK,
+]
+ARRAY_T = [
+    CONSTANTS.SEVEN_SEGMENT.BLANK,
+    CONSTANTS.SEVEN_SEGMENT.BLANK,
+    CONSTANTS.SEVEN_SEGMENT.LETTER_T,
+    CONSTANTS.SEVEN_SEGMENT.BLANK,
+]
 
 
 class MorseModule(KtaneHardware):
@@ -70,13 +80,13 @@ class MorseModule(KtaneHardware):
         # unique   1        Unique portion of ID, assigned at manufacture
         unique = b""
         try:
-            file_obj = open(CONFIG_FILENAME, "rb")
+            file_obj = open(CONSTANTS.MODULES.CONFIG_FILENAME, "rb")
             unique = file_obj.read(1)
             file_obj.close()
         except OSError:
             pass
 
-        return (MT_MORSE << 8) | (ord(unique) if unique else 0x00)
+        return (CONSTANTS.MODULES.TYPES.MORSE << 8) | (ord(unique) if unique else 0x00)
 
     # Called during an interrupt! Don't allocate memory or waste time!
     def on_rx(self, _pin):

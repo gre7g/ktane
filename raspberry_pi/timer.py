@@ -1,7 +1,8 @@
 from machine import Timer
 from utime import ticks_us
 
-from hardware import KtaneHardware, LOG
+from hardware import KtaneHardware
+from log import LOG
 from seven_seg import SevenSegment
 
 # Constants:

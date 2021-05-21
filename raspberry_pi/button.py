@@ -1,6 +1,8 @@
 from machine import Pin
 
-from hardware import MT_BUTTON, KtaneHardware, PT_REQUEST_ID, PT_CONFIGURE, PT_START
+from constants import CONSTANTS
+from hardware import KtaneHardware
+from log import LOG
 
 # Constants:
 CONFIG_FILENAME = "config.txt"
@@ -24,7 +26,18 @@ BUTTON = 2
 class ButtonModule(KtaneHardware):
     def __init__(self) -> None:
         KtaneHardware.__init__(self, self.read_config())
-        self.handlers.update({PT_REQUEST_ID: self.request_id, PT_CONFIGURE: self.configure, PT_START: self.start})
+        self.handlers.update(
+            {
+                CONSTANTS.PROTOCOL.PACKET_TYPE.REQUEST_ID: self.request_id,
+                CONSTANTS.PROTOCOL.PACKET_TYPE.CONFIGURE: self.configure,
+                CONSTANTS.PROTOCOL.PACKET_TYPE.START: self.start,
+                CONSTANTS.PROTOCOL.PACKET_TYPE.STOP: self.stop,
+                CONSTANTS.PROTOCOL.PACKET_TYPE.DISARMED: self.disarmed,
+            }
+        )
+        self.button_color=
+        self.button_text=b""
+        self.num_batteries=0
 
     @staticmethod
     def read_config() -> int:

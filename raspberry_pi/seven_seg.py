@@ -1,25 +1,8 @@
 from machine import Pin, Timer, Signal
 
-# Constants:
-BLANK = 10
-LETTER_R = 11
-LETTER_T = 12
-MASK_BY_DIGIT = [
-    0x7E,  # 0
-    0x30,  # 1
-    0x6D,  # 2
-    0x79,  # 3
-    0x33,  # 4
-    0x5B,  # 5
-    0x5F,  # 6
-    0x70,  # 7
-    0x7F,  # 8
-    0x73,  # 9
-    0x00,  # BLANK
-    0x05,  # LETTER_R
-    0x0F,  # LETTER_T
-]
+from constants import CONSTANTS
 
+# Constants:
 SEGMENTS = [Signal(Pin(pin, Pin.OUT), invert=True) for pin in [13, 19, 11, 10, 20, 12, 14]]
 DIGITS = [Signal(Pin(pin, Pin.OUT), invert=True) for pin in [18, 16, 22, 17]]
 for digit in DIGITS:
@@ -50,7 +33,7 @@ class SevenSegment:
     def stop(self):
         if self.timer:
             # Clear all 4 segments
-            self.display([BLANK, BLANK, BLANK, BLANK])
+            self.display([CONSTANTS.SEVEN_SEGMENT.BLANK] * 4)
             for _ in range(4):
                 self.update()
 
@@ -73,7 +56,7 @@ class SevenSegment:
             for index in range(4):
                 digit = value % 10
                 if (value == 0) and (minimum_digits <= index):
-                    digit = BLANK
+                    digit = CONSTANTS.SEVEN_SEGMENT.BLANK
                 value = value // 10
                 self.value[3 - index] = digit
 
@@ -90,7 +73,7 @@ class SevenSegment:
         self.digit = (self.digit + 1) % 4
 
         # Enable segments
-        segments = MASK_BY_DIGIT[self.value[self.digit]]
+        segments = CONSTANTS.SEVEN_SEGMENT.MASK_BY_DIGIT[self.value[self.digit]]
         for segment in range(7):
             SEGMENTS[segment].value(segments & (1 << segment))
         DP.value((self.digit + 1) == self.decimal_pos)
