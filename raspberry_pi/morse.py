@@ -7,22 +7,6 @@ from seven_seg import SevenSegment
 CONFIG_FILENAME = "config.txt"
 GRAY_DECODE = [2, 1, 3, 0]
 
-MASK_BY_DIGIT = {
-    "0": 0x7E,
-    "1": 0x30,
-    "2": 0x6D,
-    "3": 0x79,
-    "4": 0x33,
-    "5": 0x5B,
-    "6": 0x5F,
-    "7": 0x70,
-    "8": 0x7F,
-    "9": 0x73,
-    " ": 0x00,
-    "r": 0x05,
-    "t": 0x0F,
-}
-
 FREQUENCIES = [
     3500,
     3505,
@@ -70,6 +54,8 @@ class MorseModule(KtaneHardware):
         self.offset = 0
         BUTTON_RX_PIN.irq(self.on_rx)
         BUTTON_TX_PIN.irq(self.on_tx)
+        ROTARY1.irq(self.on_rotary)
+        ROTARY2.irq(self.on_rotary)
         self.display_freq()
 
     def on_rx(self, pin):
@@ -87,8 +73,11 @@ class MorseModule(KtaneHardware):
     def display_freq(self):
         self.seven_seg.display(FREQUENCIES[self.value], 3)
 
-    def poll(self) -> None:
-        # Is the knob turning?
+    @staticmethod
+    def phase() -> int:
+        return GRAY_DECODE[(2 if ROTARY1.value() else 0) | (1 if ROTARY2.value() else 0)]
+
+    def on_rotary(self, pin):
         phase = self.phase()
         direction = (phase - self.curr_phase) & 3
         self.curr_phase = phase
@@ -99,13 +88,11 @@ class MorseModule(KtaneHardware):
         if phase == 0:
             if (self.offset > 0) and (self.value < LAST_FREQ):
                 self.value += 1
+                self.display_freq()
             elif (self.offset < 0) and (self.value > 0):
                 self.value -= 1
+                self.display_freq()
             self.offset = 0
-
-    @staticmethod
-    def phase() -> int:
-        return GRAY_DECODE[(2 if ROTARY1.value() else 0) | (1 if ROTARY2.value() else 0)]
 
     @staticmethod
     def read_config() -> int:
