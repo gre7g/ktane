@@ -182,6 +182,12 @@ class KtaneHardware:
             state = disable_irq()
             self.queued &= ~CONSTANTS.QUEUED_TASKS.DISARMED
             enable_irq(state)
+        if self.queued & CONSTANTS.QUEUED_TASKS.ASK_TIME:
+            was_idle = False
+            self.send(CONSTANTS.MODULES.TIMER_ADDR,CONSTANTS.PROTOCOL.PACKET_TYPE.STATUS)
+            state = disable_irq()
+            self.queued &= ~CONSTANTS.QUEUED_TASKS.ASK_TIME
+            enable_irq(state)
 
         if was_idle:
             idle()
