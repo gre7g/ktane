@@ -10,6 +10,10 @@ class CONSTANTS:
         YELLOW = 4
         GREEN = 5
 
+    class FSM_REASON:
+        POWER_UP = 0
+        TIMER = 1
+
     class LABELS:
         ABORT = b"ABORT\x00\x00\x00"
         CAR = b"CAR"
@@ -22,6 +26,7 @@ class CONSTANTS:
         READY = 1
         ARMED = 2
         DISARMED = 3
+        ENDED = 4
 
     class MODULES:
         CONFIG_FILENAME = "config.txt"
@@ -41,6 +46,13 @@ class CONSTANTS:
             TRIGGER = 0x01
             NEEDY = 0x02
             EXCLUSIVE = 0x04
+
+        class TIMER:
+            READY_BLINK = 1000000  # 1Hz
+            READY_DUTY = 200000  # 200ms (needs to be a factor of READY_BLINK)
+            ALERT_MS = 2000  # 2s
+            STRIKE_MS = 750  # 0.75s
+            START_UP_MS = 500  # 0.5s
 
     class PROTOCOL:
         MIN_PACKET_LEN = 9
@@ -66,6 +78,7 @@ class CONSTANTS:
             BCAST_REPLY_BACKOFF = (1, 50000)
             INITIAL_RETRY_US = 2000000  # 2s
             RETRY_US = 1000000  # 1s
+            ID_SPREAD_MS = (1, 1000)
 
     class QUEUED_TASKS:
         NOTHING = 0x00
@@ -75,8 +88,15 @@ class CONSTANTS:
 
     class SEVEN_SEGMENT:
         BLANK = 10
-        LETTER_R = 11
-        LETTER_T = 12
+        LETTER_A = 11
+        LETTER_E = 12
+        LETTER_F = 13
+        LETTER_I = 14
+        LETTER_L = 15
+        LETTER_O = 0
+        LETTER_R = 16
+        LETTER_S = 5
+        LETTER_T = 17
         MASK_BY_DIGIT = [
             0x7E,  # 0
             0x30,  # 1
@@ -89,6 +109,11 @@ class CONSTANTS:
             0x7F,  # 8
             0x73,  # 9
             0x00,  # BLANK
+            0x77,  # LETTER_A
+            0x4F,  # LETTER_E
+            0x0F,  # LETTER_F
+            0x30,  # LETTER_I
+            0x0E,  # LETTER_L
             0x05,  # LETTER_R
             0x0F,  # LETTER_T
         ]
@@ -111,6 +136,10 @@ class CONSTANTS:
         START_CAP_4 = 14
         MORSE_A = 15
         MORSE_Z = 40
+
+    class STATES:
+        START = 0
+        WAITING_IDS = 1
 
     class UART:
         BAUD_RATE = 115200

@@ -1,4 +1,5 @@
-from machine import Pin, Signal
+from machine import Pin, Signal, Timer
+from random import randrange
 import struct
 
 from constants import CONSTANTS
@@ -63,8 +64,14 @@ class WireModule(KtaneHardware):
 
     def request_id(self, source: int, _dest: int, _payload: bytes) -> bool:
         LOG.debug("request_id")
-        self.send_without_queuing(
-            source, CONSTANTS.PROTOCOL.PACKET_TYPE.RESPONSE_ID, struct.pack("BB", CONSTANTS.MODULES.FLAGS.TRIGGER, 0)
+        Timer(
+            mode=Timer.ONE_SHOT,
+            period=randrange(*CONSTANTS.PROTOCOL.TIMING.ID_SPREAD_MS),
+            callback=lambda timer: self.send_without_queuing(
+                source,
+                CONSTANTS.PROTOCOL.PACKET_TYPE.RESPONSE_ID,
+                struct.pack("BB", CONSTANTS.MODULES.FLAGS.TRIGGER, 0),
+            ),
         )
         return True
 
