@@ -125,11 +125,14 @@ class SoundModule(KtaneBase):
         # running   1        True is the game is in play
         # strikes   1        Number of strikes
         # time      5        Time as a string, like " 1:12" or "16.92"
-        time_left = self.game_ends_at - time()
-        if time_left >= 60.0:
-            time_string = b"%2d:%02d" % (int(time_left / 60.0), int(time_left) % 60)
+        if self.game_ends_at:
+            time_left = self.game_ends_at - time()
+            if time_left >= 60.0:
+                time_string = b"%2d:%02d" % (int(time_left / 60.0), int(time_left) % 60)
+            else:
+                time_string = b"%5.2f" % time_left
         else:
-            time_string = b"%5.2f" % time_left
+            time_string = b"     "
         payload = struct.pack("?B5s", self.game_ends_at is not None, self.strikes, time_string)
         self.send_without_queuing(_source, CONSTANTS.PROTOCOL.PACKET_TYPE.STATUS, payload)
 
