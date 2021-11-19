@@ -55,6 +55,8 @@ class SoundModule(KtaneBase):
                 CONSTANTS.PROTOCOL.PACKET_TYPE.START: self.start,
                 CONSTANTS.PROTOCOL.PACKET_TYPE.STOP: self.stop,
                 CONSTANTS.PROTOCOL.PACKET_TYPE.SHOW_TIME: self.show_time,
+                CONSTANTS.PROTOCOL.PACKET_TYPE.DISARMED: self.disarmed,
+                CONSTANTS.PROTOCOL.PACKET_TYPE.STRIKE: self.strike,
             }
         )
         self.game_time = self.game_ends_at = self.next_beep_at = self.next_resync = None
@@ -77,6 +79,14 @@ class SoundModule(KtaneBase):
         game_time_us, = struct.unpack("<L", _payload)
         self.game_time = game_time_us / 1000000
         play(CONSTANTS.SOUNDS.FILES.TIMER_TICK, CONSTANTS.SOUNDS.FILES.TIMER_TICK_VOL)
+
+    def disarmed(self, _source: int, _dest: int, _payload: bytes):
+        LOG.debug("disarmed")
+        play(CONSTANTS.SOUNDS.FILES.DISARMED, CONSTANTS.SOUNDS.FILES.DISARMED_VOL)
+
+    def strike(self, _source: int, _dest: int, _payload: bytes):
+        LOG.debug("strike")
+        play(CONSTANTS.SOUNDS.FILES.STRIKE, CONSTANTS.SOUNDS.FILES.STRIKE_VOL)
 
     def check_queued_tasks(self, was_idle):
         if self.queued & CONSTANTS.QUEUED_TASKS.SEND_TIME:

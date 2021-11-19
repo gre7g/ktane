@@ -143,10 +143,14 @@ class CONSTANTS:
         MORSE_Z = 40
 
         class FILES:
-            TIMER_TICK = "beep-07a.mp3"
-            TIMER_TICK_VOL = 10
+            DISARMED = "242501__gabrielaraujo__powerup-success.mp3"
+            DISARMED_VOL = 100
             EXPLOSION = "607049__aenhs__explosion.mp3"
             EXPLOSION_VOL = 100
+            STRIKE = "186896__mrmacross__negativebuzz.mp3"
+            STRIKE_VOL = 100
+            TIMER_TICK = "beep-07a.mp3"
+            TIMER_TICK_VOL = 10
 
     class STATES:
         START = 0

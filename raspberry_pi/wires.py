@@ -2,7 +2,7 @@ from machine import Pin, Signal, Timer
 from random import randrange
 import struct
 
-from constants import CONSTANTS
+from ktane_lib.constants import CONSTANTS
 from log import LOG
 from hardware import KtaneHardware
 
@@ -81,7 +81,7 @@ class WireModule(KtaneHardware):
         LOG.debug("configure", payload)
         return False
 
-    def start(self, _source: int, _dest: int, _payload: bytes) -> bool:
+    def start(self, _source: int, _dest: int, _payload: bytes):
         # Payload is the difficulty but we're not adjustable so we ignore it
         LOG.debug("start")
         if self.serial_number and self.determine_correct_wire():
