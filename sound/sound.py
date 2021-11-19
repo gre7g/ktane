@@ -74,7 +74,8 @@ class SoundModule(KtaneBase):
 
     def show_time(self, _source: int, _dest: int, _payload: bytes):
         LOG.debug("show_time")
-        self.game_time, = struct.unpack("<L", _payload)
+        game_time_us, = struct.unpack("<L", _payload)
+        self.game_time = game_time_us / 1000000
         play(CONSTANTS.SOUNDS.FILES.TIMER_TICK, CONSTANTS.SOUNDS.FILES.TIMER_TICK_VOL)
 
     def check_queued_tasks(self, was_idle):
