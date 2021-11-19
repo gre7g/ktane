@@ -56,7 +56,8 @@ class CONSTANTS:
             START_UP_MS = 500  # 0.5s
 
     class PROTOCOL:
-        MIN_PACKET_LEN = 9
+        MIN_PACKET_LEN = 10
+        START_CODE = 0xAA
 
         class PACKET_TYPE:
             RESPONSE_MASK = 0x80

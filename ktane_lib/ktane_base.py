@@ -63,6 +63,7 @@ class KtaneBase:
     #
     # Field      Length     Notes
     # -------    --------   ----------------------------------------------------
+    # Start      1          Constant 0xAA
     # Length     1          Total packet length not including Length or Checksum
     # Source     2          Packet source address
     # Dest       2          Packet destination address
@@ -83,9 +84,18 @@ class KtaneBase:
             if buffered == 0:
                 self.current_packet = self.uart.read(1)
                 print(repr(self.current_packet))
-                buffered = 1
                 available -= 1
-                # self.rx_timeout = self.ticks_us() + CONSTANTS.UART.TWO_FRAMES_US
+                if self.current_packet[0] != CONSTANTS.PROTOCOL.START_CODE:
+                    self.LOG.debug("bad start")
+                    self.current_packet = b""
+                else:
+                    buffered = 1
+            if available and (buffered == 1):
+                self.current_packet += self.uart.read(1)
+                print(repr(self.current_packet))
+                available -= 1
+                buffered = 2
+            # self.rx_timeout = self.ticks_us() + CONSTANTS.UART.TWO_FRAMES_US
         elif self.rx_timeout and (self.ticks_us() > self.rx_timeout):
             # Aborted or scrambled packet
             self.LOG.warning("packet aborted")
@@ -93,7 +103,7 @@ class KtaneBase:
             self.rx_timeout = None
 
         if available:
-            length = 1 + self.current_packet[0] + 2  # Length, packet, checksum
+            length = 1 + 1 + self.current_packet[1] + 2  # Start, length, packet, checksum
             if length < CONSTANTS.PROTOCOL.MIN_PACKET_LEN:
                 # Too short to be a real packet. Discard it.
                 self.LOG.debug("discarding %r", self.current_packet)
@@ -115,8 +125,8 @@ class KtaneBase:
                     checksum += sum(self.current_packet[:-2])
                     if checksum == 0xFFFF:
                         # Checksum is okay. Save the sequence number.
-                        source, dest, packet_type, seq_num = struct.unpack("<HHBB", self.current_packet[1:7])
-                        payload = self.current_packet[7:-2]
+                        source, dest, packet_type, seq_num = struct.unpack("<HHBB", self.current_packet[2:8])
+                        payload = self.current_packet[8:-2]
                         self.current_packet = b""
                         if (packet_type & CONSTANTS.PROTOCOL.PACKET_TYPE.RESPONSE_MASK) == 0:
                             self.last_seq_seen = seq_num
@@ -179,7 +189,18 @@ class KtaneBase:
                 self.poll()
 
         # Send packet
-        data = struct.pack("<BHHBB", 2 + 2 + 1 + 1 + len(payload), self.addr, dest, packet_type, seq_num) + payload
+        data = (
+            struct.pack(
+                "<BBHHBB",
+                CONSTANTS.PROTOCOL.START_CODE,
+                2 + 2 + 1 + 1 + len(payload),
+                self.addr,
+                dest,
+                packet_type,
+                seq_num,
+            )
+            + payload
+        )
         data += struct.pack("<H", 0xFFFF - sum(data))
         done = self.ticks_us() + (len(data) * CONSTANTS.UART.ONE_FRAME_US)
         self.tx_en.on()

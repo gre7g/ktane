@@ -66,10 +66,11 @@ class Packet:
     def __repr__(self) -> str:
         if self.packet_type is None:
             try:
-                length, self.source, self.dest, packet_type, self.seq_num = struct.unpack("<BHHBB", self.data[:7])
-                assert len(self.data) == (1 + length + 2)
+                start, length, self.source, self.dest, packet_type, self.seq_num = struct.unpack("<BBHHBB", self.data[:8])
+                assert start == CONSTANTS.PROTOCOL.START_CODE
+                assert len(self.data) == (1 + 1 + length + 2)
                 self.packet_type = PacketType(packet_type)
-                self.payload = self.data[7:-2]
+                self.payload = self.data[8:-2]
                 (checksum,) = struct.unpack("<H", self.data[-2:])
                 assert (sum(self.data[:-2]) + checksum) == 0xFFFF
             except (AssertionError, struct.error, ValueError):
@@ -88,7 +89,8 @@ class Packet:
         else:
             data = (
                 struct.pack(
-                    "<BHHBB",
+                    "<BBHHBB",
+                    CONSTANTS.PROTOCOL.START_CODE,
                     2 + 2 + 1 + 1 + len(self.payload),
                     self.source,
                     self.dest,
