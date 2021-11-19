@@ -91,6 +91,7 @@ class SoundModule(KtaneBase):
             self.last_seq_seen = seq_num
             payload = struct.pack("<L", int((self.game_ends_at - now) * 1000000))
             self.send(CONSTANTS.MODULES.TYPES.TIMER << 8, CONSTANTS.PROTOCOL.PACKET_TYPE.SET_TIME, seq_num, payload)
+            self.next_resync += RESYNC_EVERY
 
         if was_idle:
             self.idle()
