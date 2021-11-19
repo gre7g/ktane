@@ -134,6 +134,7 @@ class SoundModule(KtaneBase):
             payload = struct.pack("?B5s", True, self.strikes, time_string)
         else:
             payload = struct.pack("?B5s", False, 0, b"     ")
+        LOG.debug("status %x %x %r", _source, CONSTANTS.PROTOCOL.PACKET_TYPE.STATUS, payload)
         self.send_without_queuing(_source, CONSTANTS.PROTOCOL.PACKET_TYPE.STATUS, payload)
 
     def check_queued_tasks(self, was_idle):
