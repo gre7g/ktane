@@ -34,7 +34,10 @@ class KtaneBase:
         self.send(dest, CONSTANTS.PROTOCOL.PACKET_TYPE.ACK, seq_num)
 
     def send_without_queuing(self, dest: int, packet_type: int, payload: bytes = b"") -> None:
-        seq_num = (self.last_seq_seen + 1) & 0xFF
+        if packet_type & CONSTANTS.PROTOCOL.PACKET_TYPE.RESPONSE_MASK:
+            seq_num = self.last_seq_seen
+        else:
+            seq_num = (self.last_seq_seen + 1) & 0xFF
         self.last_seq_seen = seq_num
         self.send(dest, packet_type, seq_num, payload)
 
@@ -76,7 +79,6 @@ class KtaneBase:
             was_idle = False
             if buffered == 0:
                 self.current_packet = self.uart.read(1)
-                print(repr(self.current_packet))
                 buffered = 1
                 available -= 1
                 # self.rx_timeout = self.ticks_us() + CONSTANTS.UART.TWO_FRAMES_US
@@ -96,12 +98,10 @@ class KtaneBase:
                 if (buffered + available) < length:
                     # Some more. Read it and re-queue.
                     self.current_packet += self.uart.read(available)
-                    print(repr(self.current_packet))
                     self.rx_timeout = self.ticks_us() + CONSTANTS.UART.TWO_FRAMES_US
                 else:
                     # The rest is ready
                     self.current_packet += self.uart.read(length - buffered)
-                    print(repr(self.current_packet))
                     self.rx_timeout = None
 
                     # Is the checksum okay?
@@ -116,6 +116,7 @@ class KtaneBase:
                             self.last_seq_seen = seq_num
 
                         # Is it for us?
+                        self.LOG.debug(dest, packet_type, source, self.queued_packet and self.queued_packet.dest, seq_num, self.awaiting_ack_of_seq)
                         if (
                             (dest == self.addr)
                             or (dest == CONSTANTS.MODULES.BROADCAST_ALL)
