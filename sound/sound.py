@@ -79,7 +79,7 @@ class SoundModule(KtaneBase):
 
         if self.next_beep_at and (time() >= self.next_beep_at):
             play(CONSTANTS.SOUNDS.FILES.TIMER_TICK, CONSTANTS.SOUNDS.FILES.TIMER_TICK_VOL)
-            self.next_beep_at -= 1.0
+            self.next_beep_at += 1.0
             if self.next_beep_at > self.game_ends_at:
                 self.next_beep_at = None
 
