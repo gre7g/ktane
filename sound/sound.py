@@ -96,14 +96,15 @@ class SoundModule(KtaneBase):
 
     def disarmed(self, _source: int, _dest: int, _payload: bytes):
         LOG.debug("disarmed")
-        self.armed_modules.discard(_source)
-        if self.all_modules_disarmed():
-            self.queue_packet(QueuedPacket(CONSTANTS.MODULES.BROADCAST_ALL, CONSTANTS.PROTOCOL.PACKET_TYPE.STOP))
-            self.stop()
-        else:
-            if self.next_beep_at:
-                self.next_beep_at += 1.0
-        play(CONSTANTS.SOUNDS.FILES.DISARMED, CONSTANTS.SOUNDS.FILES.DISARMED_VOL)
+        if _source in self.armed_modules:
+            self.armed_modules.discard(_source)
+            if self.all_modules_disarmed():
+                self.queue_packet(QueuedPacket(CONSTANTS.MODULES.BROADCAST_ALL, CONSTANTS.PROTOCOL.PACKET_TYPE.STOP))
+                self.stop()
+            else:
+                if self.next_beep_at:
+                    self.next_beep_at += 1.0
+            play(CONSTANTS.SOUNDS.FILES.DISARMED, CONSTANTS.SOUNDS.FILES.DISARMED_VOL)
 
     def all_modules_disarmed(self):
         return not self.armed_modules
