@@ -119,16 +119,13 @@ class SoundModule(KtaneBase):
             self.next_beep_at += 1.0
 
     def check_queued_tasks(self, was_idle):
+        now = time()
+
         if self.queued & CONSTANTS.QUEUED_TASKS.SEND_TIME:
             LOG.debug("send_time")
             was_idle = False
             self.queued &= ~CONSTANTS.QUEUED_TASKS.SEND_TIME
-            seq_num = (self.last_seq_seen + 1) & 0xFF
-            self.last_seq_seen = seq_num
-            payload = struct.pack("<L", int((self.game_ends_at - time()) * 1000000))
-            self.send(CONSTANTS.MODULES.TYPES.TIMER << 8, CONSTANTS.PROTOCOL.PACKET_TYPE.SET_TIME, seq_num, payload)
-
-        now = time()
+            self.set_time(now)
 
         if self.next_beep_at and (now >= self.next_beep_at):
             LOG.debug("beep")
@@ -139,10 +136,7 @@ class SoundModule(KtaneBase):
 
         if self.next_resync and (now >= self.next_resync):
             LOG.debug("resync")
-            seq_num = (self.last_seq_seen + 1) & 0xFF
-            self.last_seq_seen = seq_num
-            payload = struct.pack("<L", int((self.game_ends_at - now) * 1000000))
-            self.send(CONSTANTS.MODULES.TYPES.TIMER << 8, CONSTANTS.PROTOCOL.PACKET_TYPE.SET_TIME, seq_num, payload)
+            self.set_time(now)
             self.next_resync += RESYNC_EVERY
 
         if self.game_ends_at and (now >= self.game_ends_at):
@@ -151,6 +145,13 @@ class SoundModule(KtaneBase):
 
         if was_idle:
             self.idle()
+
+    def set_time(self, now: float):
+        seq_num = (self.last_seq_seen + 1) & 0xFF
+        self.last_seq_seen = seq_num
+        payload = struct.pack("<L", int((self.game_ends_at - now) * 1000000))
+        self.send(CONSTANTS.MODULES.TYPES.TIMER << 8, CONSTANTS.PROTOCOL.PACKET_TYPE.SET_TIME, seq_num, payload)
+
 
     def explode(self):
         seq_num = (self.last_seq_seen + 1) & 0xFF
