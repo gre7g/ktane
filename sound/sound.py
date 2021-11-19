@@ -47,7 +47,8 @@ def idle():
 
 class SoundModule(KtaneBase):
     def __init__(self):
-        self.modules = [CONSTANTS.MODULES.TYPES.WIRES << 8]  # TODO: make dynamic
+        # self.modules = [CONSTANTS.MODULES.TYPES.WIRES << 8]  # TODO: make dynamic
+        self.modules = [CONSTANTS.MODULES.TYPES.BUTTON << 8]  # TODO: make dynamic
         uart = PiSerial("/dev/ttyS0", 115200, timeout=1)
         tx_en = Pin(TX_EN_PIN, GPIO.OUT)
         KtaneBase.__init__(self, CONSTANTS.MODULES.TYPES.SOUND, uart, tx_en, LOG, idle, ticks_us)
@@ -89,7 +90,7 @@ class SoundModule(KtaneBase):
 
     def error(self, _source: int, _dest: int, _payload: bytes):
         LOG.debug("error")
-        self.send_without_queuing(CONSTANTS.MODULES.BROADCAST_ALL, CONSTANTS.PROTOCOL.PACKET_TYPE.STOP)
+        self.queue_packet(QueuedPacket(CONSTANTS.MODULES.BROADCAST_ALL, CONSTANTS.PROTOCOL.PACKET_TYPE.STOP))
         self.stop()
         play(CONSTANTS.SOUNDS.FILES.STRIKE, CONSTANTS.SOUNDS.FILES.STRIKE_VOL)
 
@@ -97,7 +98,7 @@ class SoundModule(KtaneBase):
         LOG.debug("disarmed")
         self.armed_modules.discard(_source)
         if self.all_modules_disarmed():
-            self.send_without_queuing(CONSTANTS.MODULES.BROADCAST_ALL, CONSTANTS.PROTOCOL.PACKET_TYPE.STOP)
+            self.queue_packet(QueuedPacket(CONSTANTS.MODULES.BROADCAST_ALL, CONSTANTS.PROTOCOL.PACKET_TYPE.STOP))
             self.stop()
         else:
             if self.next_beep_at:
@@ -176,7 +177,7 @@ class SoundModule(KtaneBase):
         )
 
     def explode(self):
-        self.send_without_queuing(CONSTANTS.MODULES.BROADCAST_ALL, CONSTANTS.PROTOCOL.PACKET_TYPE.STOP)
+        self.queue_packet(QueuedPacket(CONSTANTS.MODULES.BROADCAST_ALL, CONSTANTS.PROTOCOL.PACKET_TYPE.STOP))
         self.stop()
         play(CONSTANTS.SOUNDS.FILES.EXPLOSION, CONSTANTS.SOUNDS.FILES.EXPLOSION_VOL)
 

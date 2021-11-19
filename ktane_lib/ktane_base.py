@@ -45,7 +45,10 @@ class KtaneBase:
         seq_num = (self.last_seq_seen + 1) & 0xFF
         self.last_seq_seen = self.awaiting_ack_of_seq = seq_num
         self.send(self.queued_packet.dest, self.queued_packet.packet_type, seq_num, self.queued_packet.payload)
-        self.next_retry = self.ticks_us() + retry_time
+        if self.queued_packet.dest & CONSTANTS.MODULES.BROADCAST_MASK:
+            self.queued_packet = self.next_retry = None
+        else:
+            self.next_retry = self.ticks_us() + retry_time
 
     def send_block_return_response(self, packet: QueuedPacket):
         self.queued_packet = packet
@@ -79,6 +82,7 @@ class KtaneBase:
             was_idle = False
             if buffered == 0:
                 self.current_packet = self.uart.read(1)
+                print(repr(self.current_packet))
                 buffered = 1
                 available -= 1
                 # self.rx_timeout = self.ticks_us() + CONSTANTS.UART.TWO_FRAMES_US
@@ -98,10 +102,12 @@ class KtaneBase:
                 if (buffered + available) < length:
                     # Some more. Read it and re-queue.
                     self.current_packet += self.uart.read(available)
+                    print(repr(self.current_packet))
                     self.rx_timeout = self.ticks_us() + CONSTANTS.UART.TWO_FRAMES_US
                 else:
                     # The rest is ready
                     self.current_packet += self.uart.read(length - buffered)
+                    print(repr(self.current_packet))
                     self.rx_timeout = None
 
                     # Is the checksum okay?
