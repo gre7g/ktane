@@ -89,7 +89,7 @@ class KtaneBase:
             length = 1 + self.current_packet[0] + 2  # Length, packet, checksum
             if length < CONSTANTS.PROTOCOL.MIN_PACKET_LEN:
                 # Too short to be a real packet. Discard it.
-                self.LOG.debug("discarding", self.current_packet)
+                self.LOG.debug("discarding %r", self.current_packet)
                 self.current_packet = b""
             else:
                 if (buffered + available) < length:
