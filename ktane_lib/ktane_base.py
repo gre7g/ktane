@@ -76,6 +76,7 @@ class KtaneBase:
             was_idle = False
             if buffered == 0:
                 self.current_packet = self.uart.read(1)
+                print(repr(self.current_packet))
                 buffered = 1
                 available -= 1
                 # self.rx_timeout = self.ticks_us() + CONSTANTS.UART.TWO_FRAMES_US
@@ -95,10 +96,12 @@ class KtaneBase:
                 if (buffered + available) < length:
                     # Some more. Read it and re-queue.
                     self.current_packet += self.uart.read(available)
+                    print(repr(self.current_packet))
                     self.rx_timeout = self.ticks_us() + CONSTANTS.UART.TWO_FRAMES_US
                 else:
                     # The rest is ready
                     self.current_packet += self.uart.read(length - buffered)
+                    print(repr(self.current_packet))
                     self.rx_timeout = None
 
                     # Is the checksum okay?
@@ -126,6 +129,7 @@ class KtaneBase:
                                 and (seq_num == self.awaiting_ack_of_seq)
                             ):
                                 self.queued_packet = self.awaiting_ack_of_seq = self.next_retry = None
+                                self.LOG.debug("reply %r", payload)
                                 self.reply_storage = payload
 
                             # Do we have a handler?

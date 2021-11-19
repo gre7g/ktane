@@ -137,6 +137,8 @@ class SoundModule(KtaneBase):
         LOG.debug("status %x %x %r", _source, CONSTANTS.PROTOCOL.PACKET_TYPE.STATUS, payload)
         self.send_without_queuing(_source, CONSTANTS.PROTOCOL.PACKET_TYPE.STATUS, payload)
 
+        return True  # We are sending an ACK
+
     def check_queued_tasks(self, was_idle):
         now = time()
 

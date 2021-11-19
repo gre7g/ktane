@@ -175,11 +175,11 @@ class ButtonModule(KtaneHardware):
         #
         # Field     Length   Notes
         # -------   ------   -----------------------------------------
-        # running   1        True is the game is in play
+        # running   1        1 is the game is in play, 0 otherwise
         # strikes   1        Number of strikes
         # time      5        Time as a string, like " 1:12" or "16.92"
         LOG.debug("status", payload)
-        _running, _strikes, time = struct.unpack("<BB5s", payload)
+        _running, _strikes, time = struct.unpack("BB5s", payload)
 
         # Game logic
         if (self.button_color == CONSTANTS.COLORS.BLUE) and (self.button_text == CONSTANTS.LABELS.ABORT):
