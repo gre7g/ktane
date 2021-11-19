@@ -96,7 +96,7 @@ class SoundModule(KtaneBase):
 
     def disarmed(self, _source: int, _dest: int, _payload: bytes):
         LOG.debug("disarmed")
-        if _source in self.armed_modules:
+        if self.game_ends_at and (_source in self.armed_modules):
             self.armed_modules.discard(_source)
             if self.all_modules_disarmed():
                 self.queue_packet(QueuedPacket(CONSTANTS.MODULES.BROADCAST_ALL, CONSTANTS.PROTOCOL.PACKET_TYPE.STOP))
@@ -110,14 +110,15 @@ class SoundModule(KtaneBase):
         return not self.armed_modules
 
     def strike(self, _source: int, _dest: int, _payload: bytes):
-        LOG.debug("strike")
-        self.strikes += 1
-        if self.strikes >= NUM_STRIKES:
-            self.explode()
-        else:
-            play(CONSTANTS.SOUNDS.FILES.STRIKE, CONSTANTS.SOUNDS.FILES.STRIKE_VOL)
-            if self.next_beep_at:
-                self.next_beep_at += 1.0
+        if self.game_ends_at:
+            LOG.debug("strike")
+            self.strikes += 1
+            if self.strikes >= NUM_STRIKES:
+                self.explode()
+            else:
+                play(CONSTANTS.SOUNDS.FILES.STRIKE, CONSTANTS.SOUNDS.FILES.STRIKE_VOL)
+                if self.next_beep_at:
+                    self.next_beep_at += 1.0
 
     def status(self, _source: int, _dest: int, _payload: bytes):
         # Payload:
