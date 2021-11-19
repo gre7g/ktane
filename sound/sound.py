@@ -55,6 +55,7 @@ class SoundModule(KtaneBase):
             {
                 # CONSTANTS.PROTOCOL.PACKET_TYPE.REQUEST_ID: self.request_id,
                 CONSTANTS.PROTOCOL.PACKET_TYPE.START: self.start,
+                CONSTANTS.PROTOCOL.PACKET_TYPE.ERROR: self.error,
                 CONSTANTS.PROTOCOL.PACKET_TYPE.STOP: self.stop,
                 CONSTANTS.PROTOCOL.PACKET_TYPE.SHOW_TIME: self.show_time,
                 CONSTANTS.PROTOCOL.PACKET_TYPE.DISARMED: self.disarmed,

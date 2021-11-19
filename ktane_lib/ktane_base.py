@@ -108,6 +108,7 @@ class KtaneBase:
                         # Checksum is okay. Save the sequence number.
                         source, dest, packet_type, seq_num = struct.unpack("<HHBB", self.current_packet[1:7])
                         payload = self.current_packet[7:-2]
+                        self.current_packet = b""
                         if (packet_type & CONSTANTS.PROTOCOL.PACKET_TYPE.RESPONSE_MASK) == 0:
                             self.last_seq_seen = seq_num
 
@@ -137,7 +138,8 @@ class KtaneBase:
                                 ):
                                     self.send_ack(source, seq_num)
 
-                    self.current_packet = b""
+                    else:
+                        self.current_packet = b""
 
         # Need to retry?
         if (self.next_retry is not None) and (self.ticks_us() >= self.next_retry):
