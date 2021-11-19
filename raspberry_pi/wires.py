@@ -89,7 +89,6 @@ class WireModule(KtaneHardware):
         else:
             self.unable_to_arm()
             self.set_mode(CONSTANTS.MODES.SLEEP)
-        return False
 
     def disable_irqs(self):
         # Disable handlers

@@ -1,7 +1,9 @@
 from machine import Timer
+from random import randrange
+import struct
 from utime import ticks_us
 
-from constants import CONSTANTS
+from ktane_lib.constants import CONSTANTS
 from hardware import KtaneHardware
 from log import LOG
 from seven_seg import SevenSegment
@@ -49,30 +51,77 @@ ARRAY_LOSE = [
 
 class TimerModule(KtaneHardware):
     def __init__(self) -> None:
-        KtaneHardware.__init__(self, 0)
+        KtaneHardware.__init__(self, self.read_config())
         self.handlers.update(
             {
-                CONSTANTS.PROTOCOL.PACKET_TYPE.RESPONSE_ID: self.response_id,
+                CONSTANTS.PROTOCOL.PACKET_TYPE.REQUEST_ID: self.request_id,
+                CONSTANTS.PROTOCOL.PACKET_TYPE.SET_TIME: self.set_time,
+                CONSTANTS.PROTOCOL.PACKET_TYPE.START: self.start,
+                CONSTANTS.PROTOCOL.PACKET_TYPE.STOP: self.stop,
             }
         )
         self.display_mode = MODE_READY
-        self.seven_seg = SevenSegment()
+        self.seven_seg = None
         self.hundredths_mode = False
         self.timer = None
         self.stop_time = 0
         self.change_mode_time = 0
         self.strikes = 0
-        self.state=0
         self.display(MODE_READY)
-        self.fsm(CONSTANTS.FSM_REASON.POWER_UP)
+    #     self.state=0
+    #     self.fsm(CONSTANTS.FSM_REASON.POWER_UP)
+    #
+    # def fsm(self, reason):
+    #     if reason==CONSTANTS.FSM_REASON.POWER_UP:
+    #         Timer(mode=Timer.ONE_SHOT,period=CONSTANTS.MODULES.TIMER.START_UP_MS,callback=lambda timer:self.fsm(CONSTANTS.FSM_REASON.TIMER))
+    #         self.state=CONSTANTS.STATES.START
+    #     elif (self.state==CONSTANTS.STATES.START)and(reason==CONSTANTS.FSM_REASON.TIMER):
+    #         self.send_without_queuing(CONSTANTS.MODULES.BROADCAST_ALL,CONSTANTS.PROTOCOL.PACKET_TYPE.REQUEST_ID)
+    #         self.state=CONSTANTS.STATES.
 
-    def fsm(self, reason):
-        if reason==CONSTANTS.FSM_REASON.POWER_UP:
-            Timer(mode=Timer.ONE_SHOT,period=CONSTANTS.MODULES.TIMER.START_UP_MS,callback=lambda timer:self.fsm(CONSTANTS.FSM_REASON.TIMER))
-            self.state=CONSTANTS.STATES.START
-        elif (self.state==CONSTANTS.STATES.START)and(reason==CONSTANTS.FSM_REASON.TIMER):
-            self.send_without_queuing(CONSTANTS.MODULES.BROADCAST_ALL,CONSTANTS.PROTOCOL.PACKET_TYPE.REQUEST_ID)
-            self.state=CONSTANTS.STATES.
+    @staticmethod
+    def read_config() -> int:
+        # Format:
+        #
+        # Field    Length   Notes
+        # ------   ------   ---------------------------------------------
+        # unique   1        Unique portion of ID, assigned at manufacture
+        unique = b""
+        try:
+            file_obj = open(CONSTANTS.MODULES.CONFIG_FILENAME, "rb")
+            unique = file_obj.read(1)
+            file_obj.close()
+        except OSError:
+            pass
+
+        return (CONSTANTS.MODULES.TYPES.TIMER << 8) | (ord(unique) if unique else 0x00)
+
+    def request_id(self, source: int, _dest: int, _payload: bytes) -> bool:
+        LOG.debug("request_id")
+        Timer(
+            mode=Timer.ONE_SHOT,
+            period=randrange(*CONSTANTS.PROTOCOL.TIMING.ID_SPREAD_MS),
+            callback=lambda timer: self.send_without_queuing(
+                source,
+                CONSTANTS.PROTOCOL.PACKET_TYPE.RESPONSE_ID,
+                struct.pack("BB", CONSTANTS.MODULES.FLAGS.EXCLUSIVE, 0),
+            ),
+        )
+        return True  # I handled my own ACK
+
+    def set_time(self, source: int, _dest: int, _payload: bytes):
+        LOG.debug("set_time")
+        time_left, = struct.unpack("<L", _payload)
+        self.start_timer(time_left)
+
+    def start(self, _source: int, _dest: int, _payload: bytes):
+        # Payload is the difficulty but we're not adjustable so we ignore it
+        LOG.debug("start")
+        self.seven_seg = SevenSegment()
+
+    def stop(self, source: int, dest: int, payload: bytes) -> bool:
+        self.stop_timer()
+        return KtaneHardware.stop(self, source, dest, payload)
 
     def start_timer(self, time: int):
         self.stop_time = ticks_us() + time
@@ -113,17 +162,18 @@ class TimerModule(KtaneHardware):
 
     # Called during an interrupt! Don't allocate memory or waste time!
     def on_timer(self, timer=None):
-        # Which mode are we in?
-        if self.display_mode == MODE_READY:
-            # Flash
-            flash = (ticks_us() % CONSTANTS.MODULES.TIMER.READY_BLINK) < CONSTANTS.MODULES.TIMER.READY_DUTY
-            self.seven_seg.display(ARRAY_BLANK, colon=flash)
-        elif self.display_mode == MODE_RUNNING:
-            self.update_countdown()
-        elif self.display_mode == MODE_STRIKE:
-            self.display(MODE_READY if self.mode == CONSTANTS.MODES.ENDED else MODE_RUNNING)
-        else:  # if (self.display_mode == MODE_SHOW_ERROR) or (self.display_mode == MODE_LOSE):
-            self.display(MODE_READY)
+        if self.seven_seg:
+            # Which mode are we in?
+            if self.display_mode == MODE_READY:
+                # Flash
+                flash = (ticks_us() % CONSTANTS.MODULES.TIMER.READY_BLINK) < CONSTANTS.MODULES.TIMER.READY_DUTY
+                self.seven_seg.display(ARRAY_BLANK, colon=flash)
+            elif self.display_mode == MODE_RUNNING:
+                self.update_countdown()
+            elif self.display_mode == MODE_STRIKE:
+                self.display(MODE_READY if self.mode == CONSTANTS.MODES.ENDED else MODE_RUNNING)
+            else:  # if (self.display_mode == MODE_SHOW_ERROR) or (self.display_mode == MODE_LOSE):
+                self.display(MODE_READY)
 
     def update_countdown(self):
         remaining = self.stop_time - ticks_us()

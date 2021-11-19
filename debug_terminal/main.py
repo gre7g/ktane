@@ -14,6 +14,7 @@ SERIAL_TIMEOUT = 1.0
 MAX_LOG_LINES = 20
 BROADCAST = 0xFFFF
 BCAST_MASK = 0x00FF
+TIMER = 0x1200
 
 
 def listener(port: str, outgoing: Queue, incoming: Callable):
@@ -50,6 +51,7 @@ class PacketType(Enum):
     READ_STATUS = 0x09
     STATUS = 0x89
     SOUND_REQUEST = 0x0A
+    SET_TIME = 0x0B
 
 
 @attr.s(repr=False)
@@ -124,6 +126,9 @@ class TermFrame(wx.Frame):
         button = wx.Button(self, label="STOP")
         button.Bind(wx.EVT_BUTTON, self.on_stop)
         sizer3.Add(button, 0, wx.EXPAND | wx.TOP, 10)
+        button = wx.Button(self, label="SET_TIME")
+        button.Bind(wx.EVT_BUTTON, self.set_time)
+        sizer3.Add(button, 0, wx.EXPAND | wx.TOP, 10)
         self.log_ctrl = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_READONLY)
         sizer2.Add(self.log_ctrl, 3, wx.LEFT | wx.EXPAND, 10)
         self.SetSizerAndFit(sizer1)
@@ -167,6 +172,10 @@ class TermFrame(wx.Frame):
         app: TerminalApp = wx.GetApp()
         app.send_stop()
 
+    def set_time(self, _event: wx.CommandEvent):
+        app: TerminalApp = wx.GetApp()
+        app.send_set_time()
+
 
 class TerminalApp(wx.App):
     seq_num: int
@@ -193,6 +202,12 @@ class TerminalApp(wx.App):
     def send_stop(self):
         self.seq_num = (self.seq_num + 1) & 0xFF
         packet = Packet(PacketType.STOP, BROADCAST, self.seq_num)
+        self.outgoing.put(packet)
+        self.frame.add(packet)
+
+    def send_set_time(self):
+        self.seq_num = (self.seq_num + 1) & 0xFF
+        packet = Packet(PacketType.SET_TIME, TIMER, self.seq_num, struct.pack("<L", 70 * 1000000))
         self.outgoing.put(packet)
         self.frame.add(packet)
 

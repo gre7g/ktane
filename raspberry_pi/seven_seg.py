@@ -1,6 +1,6 @@
 from machine import Pin, Timer, Signal
 
-from constants import CONSTANTS
+from ktane_lib.constants import CONSTANTS
 
 # Constants:
 DEFAULT_FREQ = 200
