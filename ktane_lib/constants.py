@@ -144,6 +144,8 @@ class CONSTANTS:
         class FILES:
             TIMER_TICK = "beep-07a.mp3"
             TIMER_TICK_VOL = 10
+            EXPLOSION = "607049__aenhs__explosion.mp3"
+            EXPLOSION_VOL = 100
 
     class STATES:
         START = 0

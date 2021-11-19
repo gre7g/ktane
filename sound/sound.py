@@ -16,7 +16,7 @@ MP3_PLAYER = "mpg321"
 MP3_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mp3s")
 TX_EN_PIN = 7
 IDLE_SLEEP = 0.000050  # 50us
-RUN_TIME = 70  # 70s
+RUN_TIME = 5#70  # 70s
 BEEP_OFFSET = -0.1  # -100ms
 RESYNC_EVERY = 10  # 10s
 
@@ -68,6 +68,10 @@ class SoundModule(KtaneBase):
         self.next_resync = now + RESYNC_EVERY
         self.queued |= CONSTANTS.QUEUED_TASKS.SEND_TIME
 
+    def stop(self, _source: int = 0, _dest: int = 0, _payload: bytes = b""):
+        LOG.debug("stop")
+        self.game_ends_at = self.next_beep_at = self.next_resync = None
+
     def check_queued_tasks(self, was_idle):
         if self.queued & CONSTANTS.QUEUED_TASKS.SEND_TIME:
             LOG.debug("send_time")
@@ -81,17 +85,27 @@ class SoundModule(KtaneBase):
         now = time()
 
         if self.next_beep_at and (now >= self.next_beep_at):
+            LOG.debug("beep")
             play(CONSTANTS.SOUNDS.FILES.TIMER_TICK, CONSTANTS.SOUNDS.FILES.TIMER_TICK_VOL)
             self.next_beep_at += 1.0
             if self.next_beep_at > self.game_ends_at:
                 self.next_beep_at = None
 
         if self.next_resync and (now >= self.next_resync):
+            LOG.debug("resync")
             seq_num = (self.last_seq_seen + 1) & 0xFF
             self.last_seq_seen = seq_num
             payload = struct.pack("<L", int((self.game_ends_at - now) * 1000000))
             self.send(CONSTANTS.MODULES.TYPES.TIMER << 8, CONSTANTS.PROTOCOL.PACKET_TYPE.SET_TIME, seq_num, payload)
             self.next_resync += RESYNC_EVERY
+
+        if self.game_ends_at and (now >= self.game_ends_at):
+            LOG.debug("game_ends")
+            seq_num = (self.last_seq_seen + 1) & 0xFF
+            self.last_seq_seen = seq_num
+            self.send(CONSTANTS.MODULES.BROADCAST_ALL, CONSTANTS.PROTOCOL.PACKET_TYPE.STOP, seq_num)
+            self.stop()
+            play(CONSTANTS.SOUNDS.FILES.EXPLOSION, CONSTANTS.SOUNDS.FILES.EXPLOSION_VOL)
 
         if was_idle:
             self.idle()
