@@ -85,6 +85,14 @@ class SoundModule(KtaneBase):
         self.game_time = game_time_us / 1000000
         play(CONSTANTS.SOUNDS.FILES.TIMER_TICK, CONSTANTS.SOUNDS.FILES.TIMER_TICK_VOL)
 
+    def error(self, _source: int, _dest: int, _payload: bytes):
+        LOG.debug("error")
+        seq_num = (self.last_seq_seen + 1) & 0xFF
+        self.last_seq_seen = seq_num
+        self.send(CONSTANTS.MODULES.BROADCAST_ALL, CONSTANTS.PROTOCOL.PACKET_TYPE.STOP, seq_num)
+        self.stop()
+        play(CONSTANTS.SOUNDS.FILES.STRIKE, CONSTANTS.SOUNDS.FILES.STRIKE_VOL)
+
     def disarmed(self, _source: int, _dest: int, _payload: bytes):
         LOG.debug("disarmed")
         self.armed_modules.discard(_source)

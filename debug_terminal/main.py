@@ -253,10 +253,10 @@ class TerminalApp(wx.App):
             self.send_stop()
         elif packet.packet_type == PacketType.READ_STATUS:
             self.send_status(packet.source, packet.seq_num)
-        elif ((packet.dest & CONSTANTS.MODULES.BROADCAST_MASK) != CONSTANTS.MODULES.BROADCAST_MASK) and (
-            (packet.packet_type.value & PacketType.ACK.value) != PacketType.ACK.value
-        ):
-            self.send_ack(packet.source, packet.seq_num)
+        # elif ((packet.dest & CONSTANTS.MODULES.BROADCAST_MASK) != CONSTANTS.MODULES.BROADCAST_MASK) and (
+        #     (packet.packet_type.value & PacketType.ACK.value) != PacketType.ACK.value
+        # ):
+        #     self.send_ack(packet.source, packet.seq_num)
 
 
 if __name__ == "__main__":
