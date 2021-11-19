@@ -245,11 +245,11 @@ class TerminalApp(wx.App):
         self.frame.add(packet)
         if packet.packet_type != PacketType.ACK:
             self.seq_num = packet.seq_num
-        if packet.packet_type == PacketType.ERROR:
-            self.send_ack(packet.source, packet.seq_num)
-            self.send_stop()
-        elif packet.packet_type == PacketType.READ_STATUS:
-            self.send_status(packet.source, packet.seq_num)
+        # if packet.packet_type == PacketType.ERROR:
+        #     self.send_ack(packet.source, packet.seq_num)
+        #     self.send_stop()
+        # elif packet.packet_type == PacketType.READ_STATUS:
+        #     self.send_status(packet.source, packet.seq_num)
         # elif ((packet.dest & CONSTANTS.MODULES.BROADCAST_MASK) != CONSTANTS.MODULES.BROADCAST_MASK) and (
         #     (packet.packet_type.value & PacketType.ACK.value) != PacketType.ACK.value
         # ):
