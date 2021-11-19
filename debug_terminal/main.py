@@ -14,7 +14,7 @@ PORT = "COM4"
 SERIAL_TIMEOUT = 1.0
 MAX_LOG_LINES = 20
 TIMER = 0x1200
-GAME_TIME = 70 * 1000000
+GAME_TIME = 70100000  # 70.1s
 
 
 def listener(port: str, outgoing: Queue, incoming: Callable):
