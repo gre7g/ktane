@@ -116,7 +116,6 @@ class KtaneBase:
                             self.last_seq_seen = seq_num
 
                         # Is it for us?
-                        self.LOG.debug(dest, packet_type, source, self.queued_packet and self.queued_packet.dest, seq_num, self.awaiting_ack_of_seq)
                         if (
                             (dest == self.addr)
                             or (dest == CONSTANTS.MODULES.BROADCAST_ALL)
