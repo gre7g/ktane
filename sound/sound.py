@@ -65,11 +65,16 @@ class SoundModule(KtaneBase):
 
     def check_queued_tasks(self, was_idle):
         if self.queued & CONSTANTS.QUEUED_TASKS.SEND_TIME:
+            LOG.debug("send_time")
+            was_idle = False
             self.queued &= ~CONSTANTS.QUEUED_TASKS.SEND_TIME
             seq_num = (self.last_seq_seen + 1) & 0xFF
             self.last_seq_seen = seq_num
             payload = struct.pack("<L", int((self.game_ends_at - time()) * 1000000))
             self.send(CONSTANTS.MODULES.TYPES.TIMER, CONSTANTS.PROTOCOL.PACKET_TYPE.SET_TIME, seq_num, payload)
+
+        if was_idle:
+            self.idle()
 
     # def request_id(self, source: int, _dest: int, _payload: bytes) -> bool:
     #     LOG.debug("request_id")
