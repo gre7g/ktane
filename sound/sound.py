@@ -18,6 +18,7 @@ TX_EN_PIN = 7
 IDLE_SLEEP = 0.000050  # 50us
 BEEP_OFFSET = -0.1  # -100ms
 RESYNC_EVERY = 10  # 10s
+NUM_STRIKES = 3
 
 
 def play(filename: str, volume: int = 100):
@@ -46,6 +47,7 @@ def idle():
 
 class SoundModule(KtaneBase):
     def __init__(self):
+        self.modules = [CONSTANTS.MODULES.TYPES.WIRES << 8]  # TODO: make dynamic
         uart = PiSerial("/dev/ttyS0", 115200, timeout=1)
         tx_en = Pin(TX_EN_PIN, GPIO.OUT)
         KtaneBase.__init__(self, CONSTANTS.MODULES.TYPES.SOUND, uart, tx_en, LOG, idle, ticks_us)
@@ -59,7 +61,8 @@ class SoundModule(KtaneBase):
                 CONSTANTS.PROTOCOL.PACKET_TYPE.STRIKE: self.strike,
             }
         )
-        self.game_time = self.game_ends_at = self.next_beep_at = self.next_resync = None
+        self.game_time = self.game_ends_at = self.next_beep_at = self.next_resync = self.strikes = None
+        self.armed_modules = set()
 
     def start(self, _source: int, _dest: int, _payload: bytes):
         # Payload is the difficulty but we're not adjustable so we ignore it
@@ -69,6 +72,8 @@ class SoundModule(KtaneBase):
         self.next_beep_at = now + 1.0 - BEEP_OFFSET
         self.next_resync = now + RESYNC_EVERY
         self.queued |= CONSTANTS.QUEUED_TASKS.SEND_TIME
+        self.strikes = 0
+        self.armed_modules = set(self.modules)
 
     def stop(self, _source: int = 0, _dest: int = 0, _payload: bytes = b""):
         LOG.debug("stop")
@@ -82,11 +87,27 @@ class SoundModule(KtaneBase):
 
     def disarmed(self, _source: int, _dest: int, _payload: bytes):
         LOG.debug("disarmed")
+        self.armed_modules.discard(_source)
+        if self.all_modules_disarmed():
+            seq_num = (self.last_seq_seen + 1) & 0xFF
+            self.last_seq_seen = seq_num
+            self.send(CONSTANTS.MODULES.BROADCAST_ALL, CONSTANTS.PROTOCOL.PACKET_TYPE.STOP, seq_num)
+            self.stop()
+        else:
+            self.next_beep_at += 1.0
         play(CONSTANTS.SOUNDS.FILES.DISARMED, CONSTANTS.SOUNDS.FILES.DISARMED_VOL)
+
+    def all_modules_disarmed(self):
+        return not self.armed_modules
 
     def strike(self, _source: int, _dest: int, _payload: bytes):
         LOG.debug("strike")
-        play(CONSTANTS.SOUNDS.FILES.STRIKE, CONSTANTS.SOUNDS.FILES.STRIKE_VOL)
+        self.strikes += 1
+        if self.strikes >= NUM_STRIKES:
+            self.explode()
+        else:
+            play(CONSTANTS.SOUNDS.FILES.STRIKE, CONSTANTS.SOUNDS.FILES.STRIKE_VOL)
+            self.next_beep_at += 1.0
 
     def check_queued_tasks(self, was_idle):
         if self.queued & CONSTANTS.QUEUED_TASKS.SEND_TIME:
@@ -117,14 +138,17 @@ class SoundModule(KtaneBase):
 
         if self.game_ends_at and (now >= self.game_ends_at):
             LOG.debug("game_ends")
-            seq_num = (self.last_seq_seen + 1) & 0xFF
-            self.last_seq_seen = seq_num
-            self.send(CONSTANTS.MODULES.BROADCAST_ALL, CONSTANTS.PROTOCOL.PACKET_TYPE.STOP, seq_num)
-            self.stop()
-            play(CONSTANTS.SOUNDS.FILES.EXPLOSION, CONSTANTS.SOUNDS.FILES.EXPLOSION_VOL)
+            self.explode()
 
         if was_idle:
             self.idle()
+
+    def explode(self):
+        seq_num = (self.last_seq_seen + 1) & 0xFF
+        self.last_seq_seen = seq_num
+        self.send(CONSTANTS.MODULES.BROADCAST_ALL, CONSTANTS.PROTOCOL.PACKET_TYPE.STOP, seq_num)
+        self.stop()
+        play(CONSTANTS.SOUNDS.FILES.EXPLOSION, CONSTANTS.SOUNDS.FILES.EXPLOSION_VOL)
 
     # def request_id(self, source: int, _dest: int, _payload: bytes) -> bool:
     #     LOG.debug("request_id")
