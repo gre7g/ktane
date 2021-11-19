@@ -8,7 +8,7 @@ import subprocess
 from time import time, sleep
 
 from ktane_lib.constants import CONSTANTS
-from ktane_lib.ktane_base import KtaneBase
+from ktane_lib.ktane_base import KtaneBase, QueuedPacket
 
 # Constants:
 LOG = logging.getLogger(__file__)
@@ -82,15 +82,13 @@ class SoundModule(KtaneBase):
 
     def show_time(self, _source: int, _dest: int, _payload: bytes):
         LOG.debug("show_time")
-        game_time_us, = struct.unpack("<L", _payload)
+        (game_time_us,) = struct.unpack("<L", _payload)
         self.game_time = game_time_us / 1000000
         play(CONSTANTS.SOUNDS.FILES.TIMER_TICK, CONSTANTS.SOUNDS.FILES.TIMER_TICK_VOL)
 
     def error(self, _source: int, _dest: int, _payload: bytes):
         LOG.debug("error")
-        seq_num = (self.last_seq_seen + 1) & 0xFF
-        self.last_seq_seen = seq_num
-        self.send(CONSTANTS.MODULES.BROADCAST_ALL, CONSTANTS.PROTOCOL.PACKET_TYPE.STOP, seq_num)
+        self.send_without_queuing(CONSTANTS.MODULES.BROADCAST_ALL, CONSTANTS.PROTOCOL.PACKET_TYPE.STOP)
         self.stop()
         play(CONSTANTS.SOUNDS.FILES.STRIKE, CONSTANTS.SOUNDS.FILES.STRIKE_VOL)
 
@@ -98,9 +96,7 @@ class SoundModule(KtaneBase):
         LOG.debug("disarmed")
         self.armed_modules.discard(_source)
         if self.all_modules_disarmed():
-            seq_num = (self.last_seq_seen + 1) & 0xFF
-            self.last_seq_seen = seq_num
-            self.send(CONSTANTS.MODULES.BROADCAST_ALL, CONSTANTS.PROTOCOL.PACKET_TYPE.STOP, seq_num)
+            self.send_without_queuing(CONSTANTS.MODULES.BROADCAST_ALL, CONSTANTS.PROTOCOL.PACKET_TYPE.STOP)
             self.stop()
         else:
             self.next_beep_at += 1.0
@@ -122,7 +118,7 @@ class SoundModule(KtaneBase):
         now = time()
 
         if self.queued & CONSTANTS.QUEUED_TASKS.SEND_TIME:
-            LOG.debug("send_time")
+            LOG.debug("set_time")
             was_idle = False
             self.queued &= ~CONSTANTS.QUEUED_TASKS.SEND_TIME
             self.set_time(now)
@@ -136,27 +132,26 @@ class SoundModule(KtaneBase):
 
         if self.next_resync and (now >= self.next_resync):
             LOG.debug("resync")
+            was_idle = False
             self.set_time(now)
             self.next_resync += RESYNC_EVERY
 
         if self.game_ends_at and (now >= self.game_ends_at):
             LOG.debug("game_ends")
+            was_idle = False
             self.explode()
 
         if was_idle:
             self.idle()
 
     def set_time(self, now: float):
-        seq_num = (self.last_seq_seen + 1) & 0xFF
-        self.last_seq_seen = seq_num
         payload = struct.pack("<L", int((self.game_ends_at - now) * 1000000))
-        self.send(CONSTANTS.MODULES.TYPES.TIMER << 8, CONSTANTS.PROTOCOL.PACKET_TYPE.SET_TIME, seq_num, payload)
-
+        self.queue_packet(
+            QueuedPacket(CONSTANTS.MODULES.TYPES.TIMER << 8, CONSTANTS.PROTOCOL.PACKET_TYPE.SET_TIME, payload)
+        )
 
     def explode(self):
-        seq_num = (self.last_seq_seen + 1) & 0xFF
-        self.last_seq_seen = seq_num
-        self.send(CONSTANTS.MODULES.BROADCAST_ALL, CONSTANTS.PROTOCOL.PACKET_TYPE.STOP, seq_num)
+        self.send_without_queuing(CONSTANTS.MODULES.BROADCAST_ALL, CONSTANTS.PROTOCOL.PACKET_TYPE.STOP)
         self.stop()
         play(CONSTANTS.SOUNDS.FILES.EXPLOSION, CONSTANTS.SOUNDS.FILES.EXPLOSION_VOL)
 

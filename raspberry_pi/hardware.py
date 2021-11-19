@@ -61,7 +61,7 @@ class KtaneHardware(KtaneBase):
             was_idle = False
             seq_num = (self.last_seq_seen + 1) & 0xFF
             self.last_seq_seen = seq_num
-            self.send(CONSTANTS.MODULES.TIMER_ADDR, CONSTANTS.PROTOCOL.PACKET_TYPE.READ_STATUS, seq_num)
+            self.queue_packet(QueuedPacket(CONSTANTS.MODULES.TIMER_ADDR << 8, CONSTANTS.PROTOCOL.PACKET_TYPE.READ_STATUS, seq_num))
             state = disable_irq()
             self.queued &= ~CONSTANTS.QUEUED_TASKS.READ_STATUS
             enable_irq(state)
