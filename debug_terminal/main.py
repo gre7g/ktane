@@ -7,18 +7,17 @@ from threading import Thread
 from typing import Callable, List, Optional
 import wx
 
+from ktane_lib.constants import CONSTANTS
+
 # Constants:
 PORT = "COM4"
-BAUD = 115200
 SERIAL_TIMEOUT = 1.0
 MAX_LOG_LINES = 20
-BROADCAST = 0xFFFF
-BCAST_MASK = 0x00FF
 TIMER = 0x1200
 
 
 def listener(port: str, outgoing: Queue, incoming: Callable):
-    serial = Serial(port, BAUD, timeout=SERIAL_TIMEOUT)
+    serial = Serial(port, CONSTANTS.UART.BAUD_RATE, timeout=SERIAL_TIMEOUT)
     try:
         while True:
             if outgoing.empty():
@@ -143,7 +142,7 @@ class TermFrame(wx.Frame):
     def on_request_id(self, _event: wx.CommandEvent):
         app: TerminalApp = wx.GetApp()
         app.seq_num = (app.seq_num + 1) & 0xFF
-        packet = Packet(PacketType.REQUEST_ID, BROADCAST, app.seq_num)
+        packet = Packet(PacketType.REQUEST_ID, CONSTANTS.MODULES.BROADCAST_ALL, app.seq_num)
         app.outgoing.put(packet)
         self.add(packet)
 
@@ -164,7 +163,7 @@ class TermFrame(wx.Frame):
     def on_start(self, _event: wx.CommandEvent):
         app: TerminalApp = wx.GetApp()
         app.seq_num = (app.seq_num + 1) & 0xFF
-        packet = Packet(PacketType.START, BROADCAST, app.seq_num, b"\x00")
+        packet = Packet(PacketType.START, CONSTANTS.MODULES.BROADCAST_ALL, app.seq_num, b"\x00")
         app.outgoing.put(packet)
         self.add(packet)
 
@@ -201,13 +200,15 @@ class TerminalApp(wx.App):
 
     def send_stop(self):
         self.seq_num = (self.seq_num + 1) & 0xFF
-        packet = Packet(PacketType.STOP, BROADCAST, self.seq_num)
+        packet = Packet(PacketType.STOP, CONSTANTS.MODULES.BROADCAST_ALL, self.seq_num)
         self.outgoing.put(packet)
         self.frame.add(packet)
 
     def send_set_time(self):
         self.seq_num = (self.seq_num + 1) & 0xFF
-        packet = Packet(PacketType.SET_TIME, TIMER, self.seq_num, struct.pack("<L", 70 * 1000000))
+        packet = Packet(
+            PacketType.SET_TIME, CONSTANTS.MODULES.TYPES.TIMER, self.seq_num, struct.pack("<L", 70 * 1000000)
+        )
         self.outgoing.put(packet)
         self.frame.add(packet)
 
@@ -226,7 +227,7 @@ class TerminalApp(wx.App):
             self.send_stop()
         elif packet.packet_type == PacketType.READ_STATUS:
             self.send_status(packet.source, packet.seq_num)
-        elif ((packet.dest & BCAST_MASK) != BCAST_MASK) and (
+        elif ((packet.dest & CONSTANTS.MODULES.BROADCAST_MASK) != CONSTANTS.MODULES.BROADCAST_MASK) and (
             (packet.packet_type.value & PacketType.ACK.value) != PacketType.ACK.value
         ):
             self.send_ack(packet.source, packet.seq_num)

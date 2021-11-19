@@ -139,6 +139,9 @@ class CONSTANTS:
         MORSE_A = 15
         MORSE_Z = 40
 
+        class FILES:
+            TIMER_TICK = "beep-07a.mp3"
+
     class STATES:
         START = 0
         WAITING_IDS = 1

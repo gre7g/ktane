@@ -68,6 +68,7 @@ class TimerModule(KtaneHardware):
         self.change_mode_time = 0
         self.strikes = 0
         self.display(MODE_READY)
+
     #     self.state=0
     #     self.fsm(CONSTANTS.FSM_REASON.POWER_UP)
     #
@@ -111,7 +112,7 @@ class TimerModule(KtaneHardware):
 
     def set_time(self, source: int, _dest: int, _payload: bytes):
         LOG.debug("set_time")
-        time_left, = struct.unpack("<L", _payload)
+        (time_left,) = struct.unpack("<L", _payload)
         self.start_timer(time_left)
 
     def start(self, _source: int, _dest: int, _payload: bytes):
