@@ -60,7 +60,7 @@ class SoundModule(KtaneBase):
                 CONSTANTS.PROTOCOL.PACKET_TYPE.SHOW_TIME: self.show_time,
                 CONSTANTS.PROTOCOL.PACKET_TYPE.DISARMED: self.disarmed,
                 CONSTANTS.PROTOCOL.PACKET_TYPE.STRIKE: self.strike,
-                CONSTANTS.PROTOCOL.PACKET_TYPE.STATUS: self.status,
+                CONSTANTS.PROTOCOL.PACKET_TYPE.READ_STATUS: self.status,
             }
         )
         self.game_time = self.game_ends_at = self.next_beep_at = self.next_resync = self.strikes = None
@@ -130,9 +130,7 @@ class SoundModule(KtaneBase):
         else:
             time_string = "%5.2f" % time_left
         payload = struct.pack("?B5s", self.game_ends_at is not None, self.strikes, time_string)
-        self.send_without_queuing(
-            _source, CONSTANTS.PROTOCOL.PACKET_TYPE.STATUS | CONSTANTS.PROTOCOL.PACKET_TYPE.RESPONSE_MASK, payload
-        )
+        self.send_without_queuing(_source, CONSTANTS.PROTOCOL.PACKET_TYPE.STATUS, payload)
 
     def check_queued_tasks(self, was_idle):
         now = time()
