@@ -100,7 +100,8 @@ class SoundModule(KtaneBase):
             self.send_without_queuing(CONSTANTS.MODULES.BROADCAST_ALL, CONSTANTS.PROTOCOL.PACKET_TYPE.STOP)
             self.stop()
         else:
-            self.next_beep_at += 1.0
+            if self.next_beep_at:
+                self.next_beep_at += 1.0
         play(CONSTANTS.SOUNDS.FILES.DISARMED, CONSTANTS.SOUNDS.FILES.DISARMED_VOL)
 
     def all_modules_disarmed(self):
