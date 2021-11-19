@@ -102,7 +102,7 @@ class KtaneBase:
             self.current_packet = b""
             self.rx_timeout = None
 
-        if available:
+        if available and (buffered > 1):
             length = 1 + 1 + self.current_packet[1] + 2  # Start, length, packet, checksum
             if length < CONSTANTS.PROTOCOL.MIN_PACKET_LEN:
                 # Too short to be a real packet. Discard it.
