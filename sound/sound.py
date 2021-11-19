@@ -18,6 +18,7 @@ TX_EN_PIN = 7
 IDLE_SLEEP = 0.000050  # 50us
 RUN_TIME = 70  # 70s
 BEEP_OFFSET = -0.1  # -100ms
+RESYNC_EVERY = 10  # 10s
 
 
 def play(filename: str, volume: int = 100):
@@ -56,8 +57,7 @@ class SoundModule(KtaneBase):
                 CONSTANTS.PROTOCOL.PACKET_TYPE.STOP: self.stop,
             }
         )
-        self.game_ends_at = None
-        self.next_beep_at = None
+        self.game_ends_at = self.next_beep_at = self.next_resync = None
 
     def start(self, _source: int, _dest: int, _payload: bytes):
         # Payload is the difficulty but we're not adjustable so we ignore it
@@ -65,6 +65,7 @@ class SoundModule(KtaneBase):
         now = time()
         self.game_ends_at = now + RUN_TIME
         self.next_beep_at = now + 1.0 - BEEP_OFFSET
+        self.next_resync = now + RESYNC_EVERY
         self.queued |= CONSTANTS.QUEUED_TASKS.SEND_TIME
 
     def check_queued_tasks(self, was_idle):
@@ -77,11 +78,19 @@ class SoundModule(KtaneBase):
             payload = struct.pack("<L", int((self.game_ends_at - time()) * 1000000))
             self.send(CONSTANTS.MODULES.TYPES.TIMER << 8, CONSTANTS.PROTOCOL.PACKET_TYPE.SET_TIME, seq_num, payload)
 
-        if self.next_beep_at and (time() >= self.next_beep_at):
+        now = time()
+
+        if self.next_beep_at and (now >= self.next_beep_at):
             play(CONSTANTS.SOUNDS.FILES.TIMER_TICK, CONSTANTS.SOUNDS.FILES.TIMER_TICK_VOL)
             self.next_beep_at += 1.0
             if self.next_beep_at > self.game_ends_at:
                 self.next_beep_at = None
+
+        if self.next_resync and (now >= self.next_resync):
+            seq_num = (self.last_seq_seen + 1) & 0xFF
+            self.last_seq_seen = seq_num
+            payload = struct.pack("<L", int((self.game_ends_at - now) * 1000000))
+            self.send(CONSTANTS.MODULES.TYPES.TIMER << 8, CONSTANTS.PROTOCOL.PACKET_TYPE.SET_TIME, seq_num, payload)
 
         if was_idle:
             self.idle()
