@@ -16,7 +16,7 @@ MP3_PLAYER = "mpg321"
 MP3_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mp3s")
 TX_EN_PIN = 7
 IDLE_SLEEP = 0.000050  # 50us
-BEEP_OFFSET = -0.1  # -100ms
+BEEP_OFFSET = 0#-0.1  # -100ms
 RESYNC_EVERY = 10  # 10s
 
 
