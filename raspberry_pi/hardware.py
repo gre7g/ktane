@@ -17,7 +17,6 @@ STATUS_GREEN = 27
 
 class KtaneHardware(KtaneBase):
     mode: int
-    reply_storage: bytes
 
     def __init__(self, addr: int) -> None:
         uart = UART(UART_NUM, CONSTANTS.UART.BAUD_RATE, tx=Pin(TX_PIN), rx=Pin(RX_PIN))

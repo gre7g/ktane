@@ -10,6 +10,8 @@ class QueuedPacket:
 
 
 class KtaneBase:
+    reply_storage: bytes
+
     def __init__(self, addr: int, uart, tx_en, LOG, idle, ticks_us) -> None:
         self.current_packet = b""
         self.rx_timeout = None

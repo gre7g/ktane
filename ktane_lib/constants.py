@@ -87,6 +87,8 @@ class CONSTANTS:
         STRIKE = 0x01
         DISARMED = 0x02
         READ_STATUS = 0x04
+        SEND_ID = 0x08
+        SEND_TIME = 0x10
 
     class SEVEN_SEGMENT:
         BLANK = 10
