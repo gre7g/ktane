@@ -131,9 +131,9 @@ class SoundModule(KtaneBase):
                 time_string = b"%2d:%02d" % (int(time_left / 60.0), int(time_left) % 60)
             else:
                 time_string = b"%5.2f" % time_left
+            payload = struct.pack("?B5s", True, self.strikes, time_string)
         else:
-            time_string = b"     "
-        payload = struct.pack("?B5s", self.game_ends_at is not None, self.strikes, time_string)
+            payload = struct.pack("?B5s", False, 0, b"     ")
         self.send_without_queuing(_source, CONSTANTS.PROTOCOL.PACKET_TYPE.STATUS, payload)
 
     def check_queued_tasks(self, was_idle):
