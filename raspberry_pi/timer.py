@@ -12,10 +12,11 @@ from seven_seg import SevenSegment
 SWITCH_TO_HUNDREDTHS = 60000000  # 60s
 
 MODE_READY = 0
-MODE_RUNNING = 1
-MODE_SHOW_ERROR = 2
-MODE_STRIKE = 3
-MODE_LOSE = 4
+MODE_PAUSE = 1
+MODE_RUNNING = 2
+MODE_SHOW_ERROR = 3
+MODE_STRIKE = 4
+MODE_LOSE = 5
 
 ARRAY_BLANK = [
     CONSTANTS.SEVEN_SEGMENT.BLANK,
@@ -56,6 +57,7 @@ class TimerModule(KtaneHardware):
             {
                 CONSTANTS.PROTOCOL.PACKET_TYPE.REQUEST_ID: self.request_id,
                 CONSTANTS.PROTOCOL.PACKET_TYPE.SET_TIME: self.set_time,
+                CONSTANTS.PROTOCOL.PACKET_TYPE.SHOW_TIME: self.show_time,
                 CONSTANTS.PROTOCOL.PACKET_TYPE.START: self.start,
                 CONSTANTS.PROTOCOL.PACKET_TYPE.STOP: self.stop,
             }
@@ -115,10 +117,20 @@ class TimerModule(KtaneHardware):
         (time_left,) = struct.unpack("<L", _payload)
         self.start_timer(time_left)
 
-    def start(self, _source: int, _dest: int, _payload: bytes):
+    def show_time(self, source: int, _dest: int, _payload: bytes):
+        LOG.debug("show_time")
+        (time_left,) = struct.unpack("<L", _payload)
+        self.display_mode = MODE_PAUSE
+        if self.timer:
+            self.timer.deinit()
+            self.timer = None
+        if not self.seven_seg:
+            self.seven_seg = SevenSegment()
+        self.show_remaining(time_left, time_left < SWITCH_TO_HUNDREDTHS)
+
+    def start(self, _source: int = 0, _dest: int = 0, _payload: bytes = b""):
         # Payload is the difficulty but we're not adjustable so we ignore it
         LOG.debug("start")
-        self.seven_seg = SevenSegment()
 
     def stop(self, source: int, dest: int, payload: bytes) -> bool:
         self.stop_timer()
@@ -180,6 +192,16 @@ class TimerModule(KtaneHardware):
         remaining = self.stop_time - ticks_us()
         hundredths_mode = remaining < SWITCH_TO_HUNDREDTHS
 
+        if (remaining > 0) and (hundredths_mode and not self.hundredths_mode):
+            # Switch to hundredths mode
+            self.hundredths_mode = True
+            self.timer.deinit()
+            self.timer = Timer(mode=Timer.PERIODIC, freq=100, callback=self.on_timer)
+            LOG.info("switch to 100ths")
+
+        self.show_remaining(remaining, hundredths_mode)
+
+    def show_remaining(self, remaining, hundredths_mode):
         if remaining < 0:
             self.display(MODE_LOSE)
             LOG.info("timer zero")
@@ -190,10 +212,3 @@ class TimerModule(KtaneHardware):
             else:
                 number = remaining // 1000000
                 self.seven_seg.display(((number // 60) * 100) + (number % 60), minimum_digits=3, colon=True)
-
-            if hundredths_mode and not self.hundredths_mode:
-                # Switch to hundredths mode
-                self.hundredths_mode = True
-                self.timer.deinit()
-                self.timer = Timer(mode=Timer.PERIODIC, freq=100, callback=self.on_timer)
-                LOG.info("switch to 100ths")

@@ -1,4 +1,2 @@
-from button import ButtonModule
-
-if __name__ == "__main__":
-    ButtonModule().poll_forever()
+from timer import TimerModule
+TimerModule().poll_forever()

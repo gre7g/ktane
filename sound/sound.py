@@ -16,7 +16,6 @@ MP3_PLAYER = "mpg321"
 MP3_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mp3s")
 TX_EN_PIN = 7
 IDLE_SLEEP = 0.000050  # 50us
-RUN_TIME = 5#70  # 70s
 BEEP_OFFSET = -0.1  # -100ms
 RESYNC_EVERY = 10  # 10s
 
@@ -57,13 +56,13 @@ class SoundModule(KtaneBase):
                 CONSTANTS.PROTOCOL.PACKET_TYPE.STOP: self.stop,
             }
         )
-        self.game_ends_at = self.next_beep_at = self.next_resync = None
+        self.game_time = self.game_ends_at = self.next_beep_at = self.next_resync = None
 
     def start(self, _source: int, _dest: int, _payload: bytes):
         # Payload is the difficulty but we're not adjustable so we ignore it
         LOG.debug("start")
         now = time()
-        self.game_ends_at = now + RUN_TIME
+        self.game_ends_at = now + self.game_time
         self.next_beep_at = now + 1.0 - BEEP_OFFSET
         self.next_resync = now + RESYNC_EVERY
         self.queued |= CONSTANTS.QUEUED_TASKS.SEND_TIME
@@ -71,6 +70,11 @@ class SoundModule(KtaneBase):
     def stop(self, _source: int = 0, _dest: int = 0, _payload: bytes = b""):
         LOG.debug("stop")
         self.game_ends_at = self.next_beep_at = self.next_resync = None
+
+    def show_time(self, _source: int, _dest: int, _payload: bytes):
+        LOG.debug("show_time")
+        self.game_time, = struct.unpack("<L", _payload)
+        play(CONSTANTS.SOUNDS.FILES.TIMER_TICK, CONSTANTS.SOUNDS.FILES.TIMER_TICK_VOL)
 
     def check_queued_tasks(self, was_idle):
         if self.queued & CONSTANTS.QUEUED_TASKS.SEND_TIME:

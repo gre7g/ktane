@@ -78,6 +78,7 @@ class KtaneBase:
                 self.current_packet = self.uart.read(1)
                 buffered = 1
                 available -= 1
+                # self.rx_timeout = self.ticks_us() + CONSTANTS.UART.TWO_FRAMES_US
         elif self.rx_timeout and (self.ticks_us() > self.rx_timeout):
             # Aborted or scrambled packet
             self.LOG.warning("packet aborted")

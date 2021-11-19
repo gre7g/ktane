@@ -74,6 +74,7 @@ class CONSTANTS:
             STATUS = 0x89
             SOUND = 0x0A
             SET_TIME = 0x0B
+            SHOW_TIME = 0x0C
 
         class TIMING:
             BACKOFF_TIME = (1, 5000)
