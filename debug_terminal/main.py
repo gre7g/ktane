@@ -14,7 +14,6 @@ PORT = "COM4"
 SERIAL_TIMEOUT = 1.0
 MAX_LOG_LINES = 20
 TIMER = 0x1200
-GAME_TIME = 70100000  # 70.1s
 
 
 def listener(port: str, outgoing: Queue, incoming: Callable):
@@ -130,8 +129,11 @@ class TermFrame(wx.Frame):
         button = wx.Button(self, label="SET_TIME")
         button.Bind(wx.EVT_BUTTON, self.set_time)
         sizer3.Add(button, 0, wx.EXPAND | wx.TOP, 10)
-        button = wx.Button(self, label="SHOW_TIME")
-        button.Bind(wx.EVT_BUTTON, self.show_time)
+        button = wx.Button(self, label="SHOW_TIME1")
+        button.Bind(wx.EVT_BUTTON, self.show_time1)
+        sizer3.Add(button, 0, wx.EXPAND | wx.TOP, 10)
+        button = wx.Button(self, label="SHOW_TIME2")
+        button.Bind(wx.EVT_BUTTON, self.show_time2)
         sizer3.Add(button, 0, wx.EXPAND | wx.TOP, 10)
         self.log_ctrl = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_READONLY)
         sizer2.Add(self.log_ctrl, 3, wx.LEFT | wx.EXPAND, 10)
@@ -180,9 +182,13 @@ class TermFrame(wx.Frame):
         app: TerminalApp = wx.GetApp()
         app.send_set_time()
 
-    def show_time(self, _event: wx.CommandEvent):
+    def show_time1(self, _event: wx.CommandEvent):
         app: TerminalApp = wx.GetApp()
-        app.send_show_time()
+        app.send_show_time(70)
+
+    def show_time2(self, _event: wx.CommandEvent):
+        app: TerminalApp = wx.GetApp()
+        app.send_show_time(15)
 
 
 class TerminalApp(wx.App):
@@ -221,10 +227,13 @@ class TerminalApp(wx.App):
         self.outgoing.put(packet)
         self.frame.add(packet)
 
-    def send_show_time(self):
+    def send_show_time(self, game_time):
         self.seq_num = (self.seq_num + 1) & 0xFF
         packet = Packet(
-            PacketType.SHOW_TIME, CONSTANTS.MODULES.BROADCAST_ALL, self.seq_num, struct.pack("<L", GAME_TIME)
+            PacketType.SHOW_TIME,
+            CONSTANTS.MODULES.BROADCAST_ALL,
+            self.seq_num,
+            struct.pack("<L", int((game_time + 0.005) * 1000000)),
         )
         self.outgoing.put(packet)
         self.frame.add(packet)
