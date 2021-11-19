@@ -56,31 +56,21 @@ class KtaneHardware(KtaneBase):
             self.queued &= ~CONSTANTS.QUEUED_TASKS.DISARMED
             enable_irq(state)
 
-        if self.queued & CONSTANTS.QUEUED_TASKS.READ_STATUS:
-            self.LOG.debug("read status")
-            was_idle = False
-            seq_num = (self.last_seq_seen + 1) & 0xFF
-            self.last_seq_seen = seq_num
-            self.queue_packet(QueuedPacket(CONSTANTS.MODULES.TIMER_ADDR << 8, CONSTANTS.PROTOCOL.PACKET_TYPE.READ_STATUS, seq_num))
-            state = disable_irq()
-            self.queued &= ~CONSTANTS.QUEUED_TASKS.READ_STATUS
-            enable_irq(state)
-
         if was_idle:
             self.idle()
 
     def unable_to_arm(self) -> None:
         LOG.info("error")
-        self.queue_packet(QueuedPacket(CONSTANTS.MODULES.TIMER_ADDR, CONSTANTS.PROTOCOL.PACKET_TYPE.ERROR))
+        self.queue_packet(QueuedPacket(CONSTANTS.MODULES.MASTER_ADDR, CONSTANTS.PROTOCOL.PACKET_TYPE.ERROR))
 
     def disarmed(self):
         LOG.info("disarmed")
-        self.queue_packet(QueuedPacket(CONSTANTS.MODULES.TIMER_ADDR, CONSTANTS.PROTOCOL.PACKET_TYPE.DISARMED))
+        self.queue_packet(QueuedPacket(CONSTANTS.MODULES.MASTER_ADDR, CONSTANTS.PROTOCOL.PACKET_TYPE.DISARMED))
         self.set_mode(CONSTANTS.MODES.DISARMED)
 
     def strike(self):
         LOG.info("strike")
-        self.queue_packet(QueuedPacket(CONSTANTS.MODULES.TIMER_ADDR, CONSTANTS.PROTOCOL.PACKET_TYPE.STRIKE))
+        self.queue_packet(QueuedPacket(CONSTANTS.MODULES.MASTER_ADDR, CONSTANTS.PROTOCOL.PACKET_TYPE.STRIKE))
 
     def stop(self, _source: int, _dest: int, _payload: bytes) -> bool:
         LOG.info("stop")

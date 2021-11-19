@@ -9,3 +9,9 @@ try:
     WireModule().poll_forever()
 except ImportError:
     pass
+
+try:
+    from button import ButtonModule
+    ButtonModule().poll_forever()
+except ImportError:
+    pass

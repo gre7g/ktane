@@ -2,7 +2,8 @@ from machine import Pin, Signal, Timer, disable_irq, enable_irq
 from random import choice, randrange
 import struct
 
-from constants import CONSTANTS
+from ktane_lib.constants import CONSTANTS
+from ktane_lib.ktane_base import QueuedPacket
 from hardware import KtaneHardware
 from log import LOG
 
@@ -39,8 +40,8 @@ class ButtonModule(KtaneHardware):
                 CONSTANTS.PROTOCOL.PACKET_TYPE.CONFIGURE: self.configure,
                 CONSTANTS.PROTOCOL.PACKET_TYPE.START: self.start,
                 CONSTANTS.PROTOCOL.PACKET_TYPE.STOP: self.stop,
-                CONSTANTS.PROTOCOL.PACKET_TYPE.DISARMED: self.disarmed,
-                CONSTANTS.PROTOCOL.PACKET_TYPE.STATUS: self.status,
+                # CONSTANTS.PROTOCOL.PACKET_TYPE.DISARMED: self.disarmed,
+                # CONSTANTS.PROTOCOL.PACKET_TYPE.STATUS: self.status,
             }
         )
         self.debouncing = False
@@ -154,7 +155,22 @@ class ButtonModule(KtaneHardware):
         self.set_strip(LED_MAP[CONSTANTS.COLORS.BLACK])
         self.queued |= CONSTANTS.QUEUED_TASKS.READ_STATUS
 
-    def status(self, _source: int, _dest: int, payload: bytes = b"") -> bool:
+    def check_queued_tasks(self, was_idle):
+        if self.queued & CONSTANTS.QUEUED_TASKS.READ_STATUS:
+            self.LOG.debug("read status")
+            was_idle = False
+            state = disable_irq()
+            self.queued &= ~CONSTANTS.QUEUED_TASKS.READ_STATUS
+            enable_irq(state)
+            payload = self.send_block_return_response(
+                QueuedPacket(CONSTANTS.MODULES.MASTER_ADDR, CONSTANTS.PROTOCOL.PACKET_TYPE.READ_STATUS)
+            )
+            self.status(payload)
+
+        KtaneHardware.check_queued_tasks(self, was_idle)
+
+    def status(self, payload: bytes = b""):
+    # def status(self, _source: int, _dest: int, payload: bytes = b"") -> bool:
         # Payload:
         #
         # Field     Length   Notes
@@ -185,7 +201,7 @@ class ButtonModule(KtaneHardware):
         else:
             self.check_time(time)
 
-        return True  # The status message is essentiall an ACK, so no additional ACK is required
+        # return True  # The status message is essentially an ACK, so no additional ACK is required
 
     def check_time(self, time: bytes):
         if self.strip_color == CONSTANTS.COLORS.BLUE:

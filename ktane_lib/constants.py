@@ -30,7 +30,7 @@ class CONSTANTS:
 
     class MODULES:
         CONFIG_FILENAME = "config.txt"
-        TIMER_ADDR = 0x0000
+        MASTER_ADDR = 0x0000
         BROADCAST_ALL = 0xFFFF
         BROADCAST_MASK = 0x00FF
 
