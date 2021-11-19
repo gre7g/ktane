@@ -17,6 +17,7 @@ MP3_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mp3s")
 TX_EN_PIN = 7
 IDLE_SLEEP = 0.000050  # 50us
 RUN_TIME = 70  # 70s
+BEEP_OFFSET = -0.1  # -100ms
 
 
 def play(filename: str, volume: int = 100):
@@ -56,11 +57,14 @@ class SoundModule(KtaneBase):
             }
         )
         self.game_ends_at = None
+        self.next_beep_at = None
 
     def start(self, _source: int, _dest: int, _payload: bytes):
         # Payload is the difficulty but we're not adjustable so we ignore it
         LOG.debug("start")
-        self.game_ends_at = time() + RUN_TIME
+        now = time()
+        self.game_ends_at = now + RUN_TIME
+        self.next_beep_at = now + 1.0 - BEEP_OFFSET
         self.queued |= CONSTANTS.QUEUED_TASKS.SEND_TIME
 
     def check_queued_tasks(self, was_idle):
@@ -72,6 +76,12 @@ class SoundModule(KtaneBase):
             self.last_seq_seen = seq_num
             payload = struct.pack("<L", int((self.game_ends_at - time()) * 1000000))
             self.send(CONSTANTS.MODULES.TYPES.TIMER << 8, CONSTANTS.PROTOCOL.PACKET_TYPE.SET_TIME, seq_num, payload)
+
+        if self.next_beep_at and (time() >= self.next_beep_at):
+            play(CONSTANTS.SOUNDS.FILES.TIMER_TICK, CONSTANTS.SOUNDS.FILES.TIMER_TICK_VOL)
+            self.next_beep_at -= 1.0
+            if self.next_beep_at > self.game_ends_at:
+                self.next_beep_at = None
 
         if was_idle:
             self.idle()
@@ -100,9 +110,3 @@ if __name__ == "__main__":
     GPIO.setmode(GPIO.BOARD)
     sound = SoundModule()
     sound.poll_forever()
-    # old_t = int(time())
-    # while True:
-    #     t = int(time())
-    #     if t > old_t:
-    #         old_t = t
-    #         play("beep-07a.mp3", 10)
